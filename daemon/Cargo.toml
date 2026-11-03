@@ -47,6 +47,7 @@ async-stream = "0.3"
 rusqlite = { workspace = true }
 sqlite-vec = "0.1.9"
 shellexpand = "3.1"
+dunce = "1.0"
 reqwest = { workspace = true, features = ["stream"] }
 urlencoding = "2.1"
 dirs = "5.0"

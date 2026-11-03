@@ -2124,13 +2124,12 @@ pub async fn ensure_launch_project(host: &str, port: u16, path: &Path) -> Result
     ))
 }
 
-/// Validate or create the working directory for launching an app.
-/// If the path doesn't exist, prompt the user interactively to create it.
-/// Returns the resolved path, or an error if the user declines / the path
 /// Canonical form for a launch directory: absolute, with symlinks and
 /// `.`/`..` segments resolved when the directory exists. Registration,
 /// session attribution and MCP scoping all compare canonical paths, so an
 /// un-normalized `--path` would silently point sessions at the wrong project.
+/// On Windows the verbatim `\\?\` prefix is dropped: the path becomes the
+/// launched app's working directory, and cmd.exe rejects it as a UNC path.
 fn canonical_launch_dir(path: PathBuf) -> PathBuf {
     let absolute = if path.is_absolute() {
         path
@@ -2139,7 +2138,7 @@ fn canonical_launch_dir(path: PathBuf) -> PathBuf {
             .map(|cwd| cwd.join(&path))
             .unwrap_or(path)
     };
-    std::fs::canonicalize(&absolute).unwrap_or(absolute)
+    dunce::canonicalize(&absolute).unwrap_or(absolute)
 }
 
 /// True when the daemon's running default project already matches the launch
@@ -3685,8 +3684,12 @@ mod tests {
         let resolved = resolve_launch_path(&Some(spelled)).await.unwrap().unwrap();
         assert_eq!(
             resolved,
-            std::fs::canonicalize(&root).unwrap(),
+            dunce::canonicalize(&root).unwrap(),
             "the registered project path must be canonical so session attribution matches"
+        );
+        assert!(
+            !resolved.to_string_lossy().starts_with(r"\\?\"),
+            "a verbatim path makes cmd.exe fall back to the Windows directory"
         );
         std::fs::remove_dir_all(&root).ok();
     }

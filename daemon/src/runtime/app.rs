@@ -208,7 +208,7 @@ fn local_project_defaults(project_path: Option<&str>) -> (String, String) {
             .map(|cwd| cwd.join(&raw))
             .unwrap_or(raw)
     };
-    let path = std::fs::canonicalize(&absolute).unwrap_or(absolute);
+    let path = dunce::canonicalize(&absolute).unwrap_or(absolute);
     let name = path
         .file_name()
         .and_then(|part| part.to_str())
