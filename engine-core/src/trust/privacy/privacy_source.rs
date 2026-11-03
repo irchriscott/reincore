@@ -892,17 +892,17 @@ pub(crate) mod tests {
 
     #[test]
     fn unbound_generated_looking_names_are_not_definite_in_known_files() {
-        // `api_key = key_live_...` without quotes is a bare name to the
+        // `api_key = sk_live_...` without quotes is a bare name to the
         // parser, but nothing binds it: it must stay a secret candidate in
         // known-language mode exactly as in Auto mode.
-        let source = "api_key = key_live_aaaaaaaaaaaaaaaaaaaaaaaa\n";
+        let source = "api_key = sk_live_aaaaaaaaaaaaaaaaaaaaaaaa\n";
         for hint in [SourceHint::from_path("auth.py"), SourceHint::Auto] {
             let references = SourceReferences::analyze(source, hint);
-            let start = source.find("key_live").unwrap();
+            let start = source.find("sk_live").unwrap();
             assert!(
                 !references.recognizes(
                     start,
-                    start + "key_live_aaaaaaaaaaaaaaaaaaaaaaaa".len(),
+                    start + "sk_live_aaaaaaaaaaaaaaaaaaaaaaaa".len(),
                     true
                 ),
                 "{hint:?}: unbound name must not be a definite reference"
