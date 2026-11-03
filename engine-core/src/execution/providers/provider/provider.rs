@@ -1501,6 +1501,11 @@ impl ToolExecutorRegistry {
         self
     }
 
+    /// True when no executor is registered, so no tool can ever be listed.
+    pub fn is_empty(&self) -> bool {
+        self.executors.is_empty()
+    }
+
     /// Aggregate tool definitions from all executors.
     pub async fn list_all_tools(&self) -> EngineResult<Vec<ToolDefinition>> {
         let mut all = Vec::new();

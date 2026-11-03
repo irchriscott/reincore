@@ -1359,6 +1359,29 @@ Add your upstream servers to the JSON file before enabling tool discovery.
 Local configuration and environment references remain supported. Discovery failures reject the affected operation; names are exposed as `<server>__<tool>`.
 Only configured tools are exposed, and discovery verifies every allowed tool exists.
 
+#### MCP tools in chat requests
+
+Chat requests (`/v1/chat/completions`, `/v1/responses`, `/v1/messages`, Gemini)
+also offer the session's authorized MCP tools to the model, next to the client's own
+tools, so a launched app such as Muse Code can use them without any MCP client setup.
+The client never sees these tools: when the model calls one, the engine executes it
+through the same services as `/v1/tool-calls` (authorization, loop protection, event
+recording, memoization) and asks the model again, until it answers or calls a client
+tool. Only the final response reaches the client.
+
+- A client tool with the same name as an MCP tool wins; the MCP tool is not offered.
+- A call that prefixes an MCP tool with the client's namespace (`muse.my_shop__list_orders`)
+  runs as that MCP tool.
+- Client tool calls issued in the same message as MCP calls are dropped; the model
+  re-issues them after seeing the MCP results.
+- At most 8 MCP rounds run per client turn. After that, the response is returned with
+  only the client's own tool calls.
+- While any MCP server is configured, provider rounds run unstreamed; a streaming
+  client receives the final response as an SSE stream, and streaming requests are
+  never batch-submitted.
+- MCP calls and results are not added to the client's history. A later turn calls
+  the tool again if it needs fresh data.
+
 #### What belongs in `server.json`?
 
 The input is **one server object**, not the `{"servers": [...]}` file wrapper,

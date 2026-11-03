@@ -1762,9 +1762,21 @@ pub async fn chat_completions(
             .and_then(|value| value.to_str().ok()),
     );
 
-    let result = chat_completions_inner(state, headers, req)
+    let result = if state.tool_executors.is_empty() {
+        chat_completions_inner(state, headers, req)
+            .instrument(request_span.clone())
+            .await
+    } else {
+        super::tool_loop::run_with_mcp_tools(
+            state.db.as_ref(),
+            state.tool_executors.as_ref(),
+            state.action_policy.as_ref(),
+            req,
+            |req| chat_completions_inner(state.clone(), headers.clone(), req),
+        )
         .instrument(request_span.clone())
-        .await;
+        .await
+    };
     let status = result
         .as_ref()
         .map(|response| response.status().as_u16())
@@ -1881,6 +1893,11 @@ async fn chat_completions_inner(
             .lock()
             .await
             .insert(session.id, session.clone());
+        // Batch results arrive after the turn, where no tool loop runs.
+        if !batch_requested {
+            super::tool_loop::inject_mcp_tools(state.tool_executors.as_ref(), session, &mut req)
+                .await;
+        }
     }
     let group_resolve_span = tracing::info_span!(
         parent: &resolve_span,
@@ -3092,9 +3109,21 @@ pub async fn chat_completions_single_provider(
             .and_then(|value| value.to_str().ok()),
     );
 
-    let result = chat_completions_single_provider_inner(state, headers, req)
+    let result = if state.tool_executors.is_empty() {
+        chat_completions_single_provider_inner(state, headers, req)
+            .instrument(request_span.clone())
+            .await
+    } else {
+        super::tool_loop::run_with_mcp_tools(
+            state.db.as_ref(),
+            state.tool_executors.as_ref(),
+            state.action_policy.as_ref(),
+            req,
+            |req| chat_completions_single_provider_inner(state.clone(), headers.clone(), req),
+        )
         .instrument(request_span.clone())
-        .await;
+        .await
+    };
     let status = result
         .as_ref()
         .map(|response| response.status().as_u16())
@@ -3196,6 +3225,11 @@ async fn chat_completions_single_provider_inner(
             .lock()
             .await
             .insert(session.id, session.clone());
+        // Batch results arrive after the turn, where no tool loop runs.
+        if !batch_requested {
+            super::tool_loop::inject_mcp_tools(state.tool_executors.as_ref(), session, &mut req)
+                .await;
+        }
     }
     let group_resolve_span = tracing::info_span!(
         parent: &resolve_span,

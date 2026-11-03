@@ -67,6 +67,12 @@ pub struct ToolCallRequest {
     /// conversation spawned by VS Code's internal tool execution).
     #[serde(default)]
     pub(super) is_subagent: bool,
+    /// The model's own call id, for calls the engine executes on a model's
+    /// behalf. Recording under it lets request-path replay of the same call
+    /// deduplicate instead of logging an external execution. Never accepted
+    /// from HTTP callers.
+    #[serde(skip)]
+    pub(super) tool_call_id: Option<String>,
 }
 
 pub async fn tool_calls(
@@ -95,7 +101,10 @@ pub(super) async fn execute_local_tool_call(
         .ok_or(StatusCode::NOT_FOUND)?;
 
     let mut tool_call = engine_core::ToolCall {
-        id: Uuid::new_v4().to_string(),
+        id: req
+            .tool_call_id
+            .clone()
+            .unwrap_or_else(|| Uuid::new_v4().to_string()),
         call_type: "function".to_string(),
         function: engine_core::FunctionCall {
             name: req.tool_name.clone(),
@@ -368,7 +377,7 @@ pub(super) async fn execute_local_tool_call(
     ))
 }
 
-fn local_context(session: &Session) -> engine_core::tool_cache::LocalToolCacheContext {
+pub(super) fn local_context(session: &Session) -> engine_core::tool_cache::LocalToolCacheContext {
     // Normalize exactly like session creation so MCP project scoping compares
     // identical forms (verbatim prefixes, separators, case, symlinks).
     let project_path = session

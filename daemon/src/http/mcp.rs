@@ -41,6 +41,7 @@ impl Backend for LocalBackend<'_> {
                 arguments: call.arguments,
                 safe_to_memoize: call.safe_to_memoize,
                 is_subagent: false,
+                tool_call_id: None,
             },
             self.action_policy,
         )

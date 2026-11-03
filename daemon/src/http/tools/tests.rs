@@ -107,6 +107,7 @@ async fn invoke(
             arguments: json!({"path": "src/main.rs"}),
             safe_to_memoize: consent,
             is_subagent: false,
+            tool_call_id: None,
         },
         &Default::default(),
     )
@@ -326,6 +327,7 @@ async fn action_gate_executor_policy_denies_even_a_previously_cached_call() {
             arguments: json!({"path":"src/main.rs"}),
             safe_to_memoize: true,
             is_subagent: false,
+            tool_call_id: None,
         },
         &engine_core::action_gate::ActionPolicy {
             default_allow: false,

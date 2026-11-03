@@ -42,6 +42,7 @@ mod provider_admin;
 mod request_group;
 mod sessions;
 mod titles;
+mod tool_loop;
 mod tools;
 
 pub use base::*;
