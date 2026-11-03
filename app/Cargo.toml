@@ -1,0 +1,72 @@
+[package]
+name = "reincore-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "ReinCore desktop app (Tauri) - a GUI for the engine."
+
+[lib]
+# Name differs from the bin (`reincore-app`) to avoid a PDB filename
+# collision on Windows where both targets would produce `reincore_app.pdb`.
+name = "reincore_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "reincore-app"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.4", features = [] }
+
+[dependencies]
+# The local engine crate. We still link against it so the desktop app can
+# reuse `DaemonConfig` and any shared types, but the daemon itself now runs
+# in a separate `reincore` process that outlives the desktop window.
+# Cargo matches by package name (`daemon`); we rename it to
+# `reincore` so the Rust code can use `reincore::cli::...`,
+# matching the lib's declared `name` in daemon/Cargo.toml.
+reincore = { package = "daemon", path = "../daemon" }
+engine-core = { workspace = true }
+
+# Release builds do not enable the devtools feature; debug builds support it intrinsically.
+tauri = { version = "2.4", features = ["tray-icon", "image-png"] }
+# Native OS notifications. The local edition's "push": an OS toast needs no
+# server, no VAPID keys, and no per-browser subscription lifecycle.
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2.4"
+tauri-plugin-dialog = "2.4"
+
+# Async runtime (matches the engine's tokio version).
+tokio = { workspace = true }
+
+# Error handling.
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# HTTP client used by the Rust-side health check / daemon supervision.
+reqwest = { workspace = true }
+
+# Path expansion for ~/.reincore-io.
+shellexpand = "3.1"
+dirs = "5.0"
+
+# Colored log output, same as the engine.
+colored = "2.1"
+
+# `which` is used by launch.rs (via reincore::launch) to locate app
+# executables on PATH. The desktop app links against the local engine crate
+# and calls its launch helpers, so it needs the same crate available.
+which = "7.0"
+
+# Unix-specific: detach the spawned daemon from the parent's terminal
+# session so it keeps running after the desktop app exits.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

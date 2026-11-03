@@ -1,0 +1,230 @@
+# Copy this file to ~/.reincore-io/config.toml, or point
+# REINCORE_CONFIG_PATH at another TOML file.
+#
+# API keys do not belong here. Continue to provide them through environment
+# variables or ReinCore's local credential store.
+
+# Per-provider request timeout in seconds. Defaults to 300 (5 minutes) which
+# is generous enough for slow local models (e.g. Ollama on first load). Raise
+# this further if your model legitimately needs longer to respond.
+# timeout_seconds = 300
+
+# Replay opaque provider reasoning/signatures within the active request group.
+# Disabled by default so raw reasoning remains ephemeral. Enabling this keeps
+# signed state exact in memory; ReinCore never redacts signed state in place.
+[provider_replay]
+enabled = false
+
+# Local privacy defaults. Edit these values and restart the local engine.
+# REINCORE_PRIVACY_POLICY JSON, when explicitly set, overrides this section.
+# Keep actual provider credentials in the credential store rather than here.
+[privacy]
+enabled = true
+provider_secret_action = "redact" # allow | redact | block
+tool_secret_action = "allow"      # allow | redact | block
+persist_reasoning = false
+persist_provider_state = false
+retention_days = 30
+max_persisted_string_bytes = 262144
+redaction_replacement = "[REDACTED]"
+additional_secret_values = []
+# Empty permits every provider already configured locally. Otherwise use exact
+# provider labels, for example ["anthropic", "openai"].
+approved_providers = []
+
+# Desktop toasts, read by the app rather than the daemon - the daemon has no
+# window to show one in. Changing these in the app applies straight away; a
+# category left out of this table keeps the default shown here.
+[notifications]
+enabled = true
+# A run finishes, pauses at a checkpoint, resumes, or a batch completes.
+run_outcomes = true
+# Spend moves a session to a cheaper tier.
+budget = true
+# Grounded findings and circuit-breaker interventions. Off by default: they
+# are diagnostic, they fire more often, and they read better in the app.
+agent_health = false
+
+# Capture task decisions, include them in prompts, and check repeated questions.
+# Set false for behavior/cost comparisons; stored records remain available.
+# Defaults to true. Restart the local engine after changing this setting.
+[task_decisions]
+enabled = true
+
+# Verify completion claims against tool results without adding prompt tokens.
+# The optional verifier uses this total per-completion token allowance (1024..8192).
+# Restart after changing. See reincore-docs/claim-grounding.md.
+[claim_grounding]
+enabled = true
+verifier_enabled = false
+verifier_token_budget = 4096
+
+# Declare contracts for tools you don't control, such as a third-party MCP
+# server, by the tool name the model calls. confirmation_pointer names where the
+# tool's ordinary result carries its ID, so no receipt is needed. At most 64.
+# [[claim_grounding.tool_contracts]]
+# tool = "gmail__send_email"
+# action = "email.send"
+# target_pointer = "/to"
+# completion_template = "Email sent to {target}."
+# confirmation_pointer = "/id"
+
+# Configure how heuristic detections respond. Supported values are observe,
+# warn, repair_once, block, and pause. Authorization and tenant isolation are
+# always blocked and cannot be weakened here. Cloud deployments can set the
+# same object as JSON in REINCORE_INTERVENTION_POLICY.
+# Deterministically invalid actions are always withheld; action_validation
+# controls whether ReinCore requests its one correction or simply blocks.
+[interventions]
+loop_detection = "repair_once"
+prompt_injection = "warn"
+claim_grounding = "warn"
+repeated_questions = "block"
+action_validation = "repair_once"
+
+# Anti-loop detection. ReinCore replaces read/search results the transcript
+# already contains with a pointer to the earlier copy, and only refuses a turn
+# when repetition survives that. Every value below is the default; delete a
+# line to keep it. `REINCORE_LOOP_*` overrides these, the settings store
+# overrides that, and a request's `reincore_loop_*` field wins over all of it.
+# Restart the local engine after changing this section.
+[loop_detection]
+# Master switch for intervening. When false the engine still scores and records
+# repetition - the telemetry keeps working - but never nudges or stops a turn.
+enabled = true
+# Replace repeated read/search results with a pointer to the copy already in
+# context. Separate from `enabled` because this only ever saves tokens; turning
+# interventions off should not silently start costing money.
+dedupe_tool_results = true
+# The same (input, output) step repeating: nudge, then refuse.
+repetition_threshold = 3
+hard_stop_threshold = 6
+# Repeated reads/searches. Deliberately larger than the step thresholds above:
+# exploration legitimately revisits ground, and the budget that catches a
+# wedged command would stop a model still finding its way around a codebase.
+# Raise these if agents are stopped while genuinely exploring large files.
+exploration_repetition_threshold = 5
+exploration_hard_stop_threshold = 12
+# Multiplier applied to the two exploration thresholds when the repeated result
+# is empty / "no matches" - so 10 and 24 by default. A miss rules a hypothesis
+# out, which is progress; only the same failing lookup repeating is a loop.
+negative_result_threshold_multiplier = 2
+# Once a successful todo update marks every item complete, allow a small
+# finalization window. A later successful file mutation resets this window.
+# This catches inspection spirals whose individual reads are all different.
+post_completion_threshold = 8
+post_completion_hard_stop_threshold = 16
+# Consecutive no-progress turns in one request group. Successful mutations,
+# verification, todo updates and novel lookup results reset this counter. The
+# first threshold emits one finalization nudge; the second refuses the turn.
+request_group_step_threshold = 64
+request_group_hard_stop_threshold = 128
+# Independent emergency fuse for total model turns, even when progress is made.
+# A successful result arriving after this arms still receives one finalization
+# turn. Raise this for intentionally very long autonomous agents.
+request_group_absolute_hard_stop_threshold = 512
+# Successful calls through generic terminal tools count as verification when
+# their command contains one of ReinCore's built-in patterns (Cargo, npm/pnpm/
+# Yarn/Bun, pytest and Python linters, Go, .NET, JVM, C/C++, Ruby, PHP, Elixir,
+# Swift, Dart/Flutter, Terraform, and other common runners). To replace that
+# list for a custom build system, uncomment and edit this value. Matching is
+# case-insensitive. An empty list disables command-based recognition; tools
+# explicitly named test/check/verify/lint/build still count as verification.
+# verification_commands = ["cargo test", "cargo clippy", "acme verify"]
+# How many recent events the detector inspects.
+window_size = 16
+
+# Lexical-or-LLM detection switches. Every feature runs on cheap local
+# heuristics (`lexical`, the default) unless flipped to `llm`, which asks a
+# Meta Muse `muse-wonder` model judgment and falls back to lexical on any
+# judge failure. `llm` mode needs the meta provider configured
+# (`META_API_KEY`) and adds latency plus usage cost on hot paths.
+[detection.prompt_injection]
+mode = "lexical" # lexical | llm
+[detection.task_boundary]
+mode = "lexical" # lexical | llm
+[detection.task_type]
+mode = "lexical" # lexical | llm
+# [detection]
+# Analysis model for `llm` mode (Meta Muse model id).
+# llm_model = "muse-wonder-1.0"
+# Per-judgment timeout in seconds; timeouts fall back to lexical.
+# llm_timeout_seconds = 30
+# Analysis input bound in characters; longer excerpts are truncated.
+# llm_max_input_chars = 32768
+
+# Global routing defaults applied to every provider unless a provider
+# overrides them below. Omit the section to keep the recommended `auto`
+# defaults.
+[routing]
+mode = "auto"                       # auto | custom | locked
+provider_strategy = "same_provider" # same_provider (only, for now)
+minimum_quality = "balanced"        # economy | balanced | high
+allow_upgrade = true                # route to a stronger tier when justified
+allow_degradation = true            # let budget pressure lower the tier
+
+# OpenTelemetry OTLP export configuration. Enable to send traces to the
+# bundled Jaeger stack or to another OTLP-compatible backend. Use
+# `reincore optl enable` to turn this on automatically when Jaeger is running.
+[otel]
+enabled = false
+exporter_otlp_endpoint = "http://localhost:4317"
+service_name = "reincore-local"
+# insecure defaults to true for local dev. Uncomment and set to false to force
+# https:// for endpoints that omit a scheme.
+# insecure = true
+
+[providers.openai]
+# The standard model anchors Pro/Ultra routing. ReinCore automatically derives
+# a lower-cost Lite sibling from its curated catalog unless Lite is pinned.
+standard_model = "gpt-5.6-terra"
+lite_model = "gpt-5.6-luna"
+# pro_model = "gpt-5.6-terra"
+ultra_model = "gpt-5.6-sol"
+# Per-provider routing override (inherits global [routing] for omitted fields).
+# [providers.openai.routing]
+# mode = "locked"
+
+[providers.anthropic]
+# Short aliases (`standard`, `lite`, `pro`, `ultra`) are also accepted.
+standard = "claude-sonnet-5"
+lite = "claude-haiku-4-5"
+ultra = "claude-fable-5"
+
+# `custom` mode uses only the explicit tier mappings below. ReinCore never
+# derives a model - an unmapped tier falls back to the standard model.
+# [providers.gemini]
+# standard = "gemini-3.6-flash"
+# lite = "gemini-3.5-flash-lite"
+# pro = "gemini-3.6-flash"
+# ultra = "gemini-3.1-pro-preview"
+# [providers.gemini.routing]
+# mode = "custom"
+[titles]
+# Session/task titles only. LLM naming runs in the background using the current
+# completion provider and only the user's input. Failures keep the local title.
+summarizer = "llm" # "reincore" or "llm"
+# LLM naming uses the provider's explicit Lite model, otherwise its Standard model.
+
+# Local MCP gateway and upstream tool execution. Restart after changing.
+# REINCORE_MCP_CONFIG overrides config_path. ~/ expands to your home directory.
+# Relative paths resolve against the directory containing this config.toml.
+[mcp]
+enabled = false
+config_path = "~/.reincore-io/mcp.json"
+
+# Pre-execution tool restrictions. Schema mismatches are always logged, but
+# provider tool calls are only withheld for them when the flag below is true.
+# Set default_allow=false and list permitted tools for a strict allowlist.
+# See ../reincore-docs/action-validation.md. Restart after changes.
+[action_policy]
+default_allow = true
+stop_on_schema_validation_error = false
+# [action_policy.tools.read_file]
+# path_arguments = ["/filePath"]
+# allowed_roots = ['C:\Projects\MyProject']
+# [action_policy.tools.fetch_url]
+# url_arguments = ["/url"]
+# allowed_origins = ["https://docs.example.com"]
+# [action_policy.tools.run_in_terminal]
+# allow = false

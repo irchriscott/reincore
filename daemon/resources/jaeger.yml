@@ -1,0 +1,53 @@
+# ReinCore local telemetry stack (Jaeger with persistent Badger storage).
+#
+# Usage:
+#     docker compose -f daemon/resources/jaeger.yml up -d
+#     docker compose -f daemon/resources/jaeger.yml down
+#
+# After the container starts, browse traces at http://localhost:16686.
+# ReinCore's local daemon will export OTLP traces when started with:
+#
+#     OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 \
+#     OTEL_SERVICE_NAME=reincore-local \
+#     reincore start
+#
+# Or use the convenience command:
+#     reincore otel start
+
+services:
+# Fix volume permissions for Jaeger (UID 10001) before it starts.
+# Docker initializes named volumes root-owned; Jaeger runs non-root and
+# needs to write /badger/keys and /badger/values.
+  jaeger-init:
+    image: busybox:latest
+    container_name: reincore-jaeger-init
+    command: ["sh", "-c", "mkdir -p /badger/keys /badger/values && chown -R 10001:10001 /badger"]
+    volumes:
+      - reincore-jaeger-data:/badger
+
+  jaeger:
+    image: jaegertracing/jaeger:2.20.0
+    container_name: reincore-jaeger
+    restart: unless-stopped
+    depends_on:
+      jaeger-init:
+        condition: service_completed_successfully
+    command: ["--config", "/etc/jaeger/config.yml"]
+    environment:
+      JAEGER_TRACE_TTL: ${JAEGER_TRACE_TTL:-720h}
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP (optional)
+    volumes:
+      - ./jaeger-config.yml:/etc/jaeger/config.yml:ro
+      - reincore-jaeger-data:/badger
+
+volumes:
+  # `docker compose down` preserves named volumes unless explicitly passed
+  # `--volumes`, so traces survive both engine and telemetry-stack restarts.
+  # Keep the engine CLI and reincore-infra on one volume even though they use
+  # different Compose project names. This is also the legacy CLI volume name,
+  # so existing local traces remain available after upgrading.
+  reincore-jaeger-data:
+    name: reincore-telemetry_reincore-jaeger-data

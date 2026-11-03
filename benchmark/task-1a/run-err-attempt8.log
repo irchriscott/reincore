@@ -1,0 +1,3 @@
+muse: workspace root: C:\Users\Christian Scott\Desktop\Projects\MetaHack\stockvisor (explicit)
+muse: workspace trust: trusted source=run-flag
+run ended with Failed: API error 502: empty response body (after 10 provider attempts)

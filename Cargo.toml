@@ -1,0 +1,96 @@
+[workspace]
+members = ["engine-core", "daemon", "app", "mcp-mock", "mcp-gateway"]
+# Only one engine ships: bare `cargo build/test/check/run` targets the
+# daemon, so `-p daemon` is unnecessary. Use `--workspace` (or `-p ...`)
+# to cover every member explicitly.
+default-members = ["daemon"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Christian Scott"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/reincore-io/reincore-engine"
+rust-version = "1.78"
+
+[workspace.dependencies]
+engine-core = { path = "engine-core" }
+mcp-mock = { path = "mcp-mock" }
+mcp-gateway = { path = "mcp-gateway" }
+
+# Async runtime
+tokio = { version = "1.38", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+# Accounting compares persisted records exactly, including JSON float payloads.
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
+
+# Error handling / utilities
+thiserror = "1.0"
+anyhow = "1.0"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.9", features = ["v4", "serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Cryptographic hashing for cache keys
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+
+# Base64 encoding/decoding (JWT token parsing)
+base64 = "0.22"
+
+# HTTP / API surface
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace"] }
+
+# Providers talk plain HTTPS/JSON. There is no control plane.
+
+# HTTP client for provider adapters
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
+url = "2.5"
+regex = "1.11"
+
+# Async stream utilities
+futures = "0.3"
+
+# Local storage
+rusqlite = { version = "0.31", features = ["bundled", "chrono", "uuid", "backup"] }
+sqlite-vec = "0.1"
+
+# Tokenization
+tiktoken-rs = "0.12"
+
+
+# Configuration
+config = "0.14"
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# .env file loading (development convenience)
+dotenvy = "0.15"
+
+# OpenTelemetry
+opentelemetry = "0.24"
+opentelemetry_sdk = { version = "0.24", features = ["rt-tokio"] }
+opentelemetry-otlp = "0.17"
+tracing-opentelemetry = "0.25"
+
+# Keep target/debug small: full debuginfo made it grow past 380 GB.
+# Line tables still give file:line in panics and backtraces.
+[profile.dev]
+debug = "line-tables-only"
+
+# Dependencies are rarely stepped into, so skip their debuginfo entirely.
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

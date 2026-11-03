@@ -1,0 +1,44 @@
+# Jaeger v2 collector/query configuration for ReinCore's local telemetry stack.
+# Badger is an embedded, single-node store well suited to this local setup.
+
+service:
+  extensions: [jaeger_storage, jaeger_query]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [jaeger_storage_exporter]
+  telemetry:
+    logs:
+      level: info
+
+extensions:
+  jaeger_query:
+    storage:
+      traces: reincore_traces
+  jaeger_storage:
+    backends:
+      reincore_traces:
+        badger:
+          directories:
+            keys: /badger/keys
+            values: /badger/values
+          ephemeral: false
+          ttl:
+            # Override inside the container with JAEGER_TRACE_TTL if needed.
+            spans: ${env:JAEGER_TRACE_TTL:-720h}
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: reincore_traces

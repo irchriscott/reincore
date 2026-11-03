@@ -1,0 +1,341 @@
+@import "tailwindcss";
+
+/* ReinCore design system - mirrors reincore-frontend exactly. The desktop
+   app is a sibling UI over the same engine, so it shares the same palette,
+   fonts, and token names. */
+@theme {
+  --font-sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-display: "Playfair Display Variable", "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-ui: "DM Sans Variable", "DM Sans", "Inter", system-ui, sans-serif;
+
+  /* Primary palette: Chili Spice. Bold, energetic, warm red tones on a dark black background */
+  --color-bg: #0a0a0a;
+  --color-bg-elevated: #111111;
+  --color-bg-subtle: #171717;
+  --color-surface: #1c1c1c;
+  --color-surface-highlight: #262626;
+
+  --color-text: #b8b8b8;
+  --color-text-muted: #737373;
+  --color-text-heading: #f5f5f5;
+
+  --color-primary: #cd1c18;
+  --color-primary-light: #ff6b5e;
+  --color-primary-dark: #9b1313;
+  --color-primary-glow: rgba(205, 28, 24, 0.35);
+
+  --color-accent: #ffa896;
+  --color-accent-soft: rgba(255, 168, 150, 0.12);
+  --color-accent-glow: rgba(255, 168, 150, 0.25);
+
+  --color-warning: #f59e0b;
+  --color-danger: #f43f5e;
+  --color-info: #38bdf8;
+  --color-success: #10b981;
+
+  --color-border: rgba(205, 28, 24, 0.15);
+  --color-border-strong: rgba(205, 28, 24, 0.3);
+}
+
+[data-theme="light"] {
+  --color-bg: #fafafa;
+  --color-bg-elevated: #ffffff;
+  --color-bg-subtle: #f3f3f3;
+  --color-surface: #f0f0f0;
+  --color-surface-highlight: #e6e6e6;
+
+  --color-text: #525252;
+  --color-text-muted: #737373;
+  --color-text-heading: #171717;
+
+  --color-primary: #c41e1a;
+  --color-primary-light: #e8453b;
+  --color-primary-dark: #9b1313;
+  --color-primary-glow: rgba(196, 30, 26, 0.25);
+
+  --color-accent: #c94a36;
+  --color-accent-soft: rgba(201, 74, 54, 0.10);
+  --color-accent-glow: rgba(201, 74, 54, 0.18);
+
+  --color-warning: #d97706;
+  --color-danger: #e11d48;
+  --color-info: #0284c7;
+  --color-success: #059669;
+
+  --color-border: rgba(196, 30, 26, 0.12);
+  --color-border-strong: rgba(196, 30, 26, 0.22);
+}
+
+:root {
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  border-radius: 0 !important;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* The visible main scrollbar controls the sticky timeline's event range. */
+[data-activity-scroll-region] {
+  overflow-anchor: none;
+}
+
+[data-activity-workspace] [data-event-scroll] {
+  overflow-y: hidden;
+  overscroll-behavior: auto;
+}
+
+[data-activity-workspace] [data-request-rail] {
+  overscroll-behavior: auto;
+}
+
+[data-activity-workspace] [data-request-rail][data-request-overflow] {
+  overscroll-behavior: contain;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+::selection {
+  background-color: var(--color-primary-glow);
+  color: var(--color-text-heading);
+}
+
+/* Display headings: Playfair Display serif with light weight + tight tracking (lyzr-style editorial feel) */
+.heading-display {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.heading-display em,
+.heading-display .emphasis {
+  font-style: italic;
+  font-weight: 400;
+  color: var(--color-primary-light);
+}
+
+/* UI headings / sub-headings: DM Sans */
+.heading-ui {
+  font-family: var(--font-ui);
+  letter-spacing: -0.01em;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-highlight);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-strong);
+}
+
+/* Markdown rendering for tool-call / tool-result content panels */
+.rc-md {
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.rc-md > :first-child {
+  margin-top: 0;
+}
+
+.rc-md > :last-child {
+  margin-bottom: 0;
+}
+
+.rc-md p {
+  margin: 0.5em 0;
+}
+
+.rc-md h1,
+.rc-md h2,
+.rc-md h3,
+.rc-md h4,
+.rc-md h5,
+.rc-md h6 {
+  color: var(--color-text-heading);
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 1em 0 0.5em;
+}
+
+.rc-md h1 { font-size: 1.125rem; }
+.rc-md h2 { font-size: 1.0625rem; }
+.rc-md h3 { font-size: 0.9375rem; }
+.rc-md h4,
+.rc-md h5,
+.rc-md h6 { font-size: 0.875rem; }
+
+.rc-md ul,
+.rc-md ol {
+  margin: 0.5em 0;
+  padding-left: 1.25em;
+}
+
+.rc-md ul { list-style: disc; }
+.rc-md ol { list-style: decimal; }
+
+.rc-md li {
+  margin: 0.25em 0;
+}
+
+.rc-md li > ul,
+.rc-md li > ol {
+  margin: 0.25em 0;
+}
+
+.rc-md a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rc-md a:hover {
+  color: var(--color-primary-light);
+}
+
+.rc-md blockquote {
+  border-left: 3px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  margin: 0.5em 0;
+  padding: 0.125em 0.75em;
+}
+
+.rc-md blockquote > :first-child { margin-top: 0; }
+.rc-md blockquote > :last-child { margin-bottom: 0; }
+
+.rc-md code {
+  background: var(--color-surface-highlight);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.125em 0.375em;
+}
+
+.rc-md pre {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  margin: 0.5em 0;
+  overflow-x: auto;
+  padding: 0.625em 0.875em;
+}
+
+.rc-md pre code {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+}
+
+.rc-md table {
+  border-collapse: collapse;
+  display: block;
+  font-size: 0.75rem;
+  margin: 0.5em 0;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.rc-md th,
+.rc-md td {
+  border: 1px solid var(--color-border);
+  padding: 0.375em 0.625em;
+  text-align: left;
+}
+
+.rc-md th {
+  background: var(--color-surface-highlight);
+  color: var(--color-text-heading);
+  font-weight: 600;
+}
+
+.rc-md hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1em 0;
+}
+
+.rc-md img {
+  border-radius: 6px;
+  max-width: 100%;
+}
+
+.rc-md input[type="checkbox"] {
+  accent-color: var(--color-primary);
+  margin-right: 0.375em;
+}
+/* Fixed-height Markdown previews keep the request header and rails compact. */
+.rc-md { overflow-wrap: anywhere; }
+.rc-md-preview { color: inherit; font-size: inherit; line-height: 1.25rem; }
+.rc-md-preview :is(p, h1, h2, h3, h4, h5, h6, ul, ol, li, blockquote, pre, table, hr) {
+  margin-top: 0;
+  margin-bottom: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+.rc-md-preview :is(pre, table) { overflow: hidden; white-space: pre-wrap; }
+.rc-md-preview pre { padding: 0; border: 0; background: none; }
+.rc-md-preview code { font-size: inherit; padding-top: 0; padding-bottom: 0; }
+.rc-md-preview blockquote { padding-top: 0; padding-bottom: 0; }
+.rc-md-preview :is(th, td) { padding-top: 0; padding-bottom: 0; }
+.rc-request-preview {
+  max-height: 3.75rem;
+  overflow: hidden;
+  color: var(--color-text-heading);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+@media (min-width: 48rem) { .rc-request-preview { max-height: 6.25rem; } }
+.rc-md-navigation-preview,
+.rc-md-event-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 0.75rem;
+}
+.rc-md-navigation-preview {
+  -webkit-line-clamp: 2;
+  max-height: 2.5rem;
+  color: var(--color-text-heading);
+  font-weight: 500;
+}
+.rc-md-event-preview {
+  -webkit-line-clamp: 1;
+  max-height: 1.25rem;
+  color: var(--color-text-muted);
+}

@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+gen/
+
+# Generated icons (regenerate via `npx @tauri-apps/cli icon ../icons/source.png -o ../icons`)
+icons/android/
+icons/ios/
+icons/*.png
+icons/*.ico
+icons/*.icns
+!icons/source.png
+
+# Logs
+*.log
