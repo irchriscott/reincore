@@ -220,6 +220,17 @@ pub enum Commands {
         checkpoints: bool,
     },
 
+    /// Export a session's timeline (tasks, requests, tokens, spend) as JSON.
+    Export {
+        /// Session UUID to export.
+        #[arg(short, long)]
+        session: String,
+
+        /// Write to this file instead of stdout.
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+
     /// Inspect, test, or start a proxy for a specific provider.
     Provider {
         #[command(subcommand)]

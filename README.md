@@ -100,6 +100,7 @@ Operational metrics and proposed scale budgets are documented in [F10 assessment
   - [Session & budget commands](#session--budget-commands)
     - [`budget`](#budget) - show or set budget limits
     - [`sessions`](#sessions) - list sessions
+    - [`export`](#export) - export a session timeline as JSON
     - [`pause`](#pause) - pause a session
     - [`resume`](#resume) - resume from a checkpoint
     - [`compact`](#compact) - compact session messages
@@ -208,7 +209,7 @@ Commands are organized into the following groups:
 | [Provider](#provider-commands) | `provider list`, `provider add`, `provider remove`, `provider test`, `provider models` |
 | [App integration](#app-integration-commands) | `launch`, `setup`, `restore`, `logout` |
 
-| [Session & budget](#session--budget-commands) | `budget`, `sessions`, `pause`, `resume`, `compact` |
+| [Session & budget](#session--budget-commands) | `budget`, `sessions`, `export`, `pause`, `resume`, `compact` |
 | [Configuration](#configuration-commands) | `config`, `routing`, `model` |
 | [Database](#database-commands) | `migrate` |
 
@@ -556,6 +557,20 @@ Local clients can register logical projects through the local-only API:
 Chat clients should send `reincore_project_path` with each request. The engine
 normalizes that path, resolves its durable project id, and scopes external
 session lookup to that project. A project may own multiple directories.
+
+#### `export`
+
+Export a session's timeline (tasks, requests, tokens, spend) as JSON. Prints to stdout, or writes to a file with `--output`. Requires the daemon to be running.
+
+```bash
+cargo run --bin reincore -- export --session <session-uuid>
+cargo run --bin reincore -- export --session <session-uuid> --output timeline.json
+```
+
+Options:
+
+- `--session` / `-s` - session UUID to export.
+- `--output` / `-o` - write to this file instead of stdout.
 
 #### `pause`
 

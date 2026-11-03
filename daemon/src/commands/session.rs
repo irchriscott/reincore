@@ -260,3 +260,60 @@ pub async fn handle_sessions(
     }
     Ok(())
 }
+
+pub async fn handle_export_timeline(
+    session: String,
+    output: Option<String>,
+    host: String,
+    port: u16,
+) -> Result<()> {
+    let session_id =
+        Uuid::parse_str(&session).map_err(|_| anyhow::anyhow!("--session must be a valid UUID"))?;
+
+    let url = format!(
+        "http://{}:{}/v1/sessions/{}/timeline",
+        host, port, session_id
+    );
+    let client = reqwest::Client::new();
+    match client.get(&url).send().await {
+        Ok(resp) if resp.status().is_success() => {
+            let body = resp
+                .json::<serde_json::Value>()
+                .await
+                .unwrap_or_else(|_| json!({}));
+            let pretty = serde_json::to_string_pretty(&body)?;
+            match output {
+                Some(path) => {
+                    std::fs::write(&path, &pretty)?;
+                    println!("Timeline exported to {}", path);
+                }
+                None => println!("{}", pretty),
+            }
+        }
+        Ok(resp) => {
+            println!("Failed to export timeline: {}", resp.status());
+        }
+        Err(e) => {
+            println!("Could not reach ReinCore daemon: {}", e);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn export_timeline_rejects_invalid_session_id_without_network() {
+        let err = handle_export_timeline(
+            "not-a-uuid".to_string(),
+            None,
+            "127.0.0.1".to_string(),
+            8989,
+        )
+        .await
+        .expect_err("invalid UUID must fail before any request");
+        assert!(err.to_string().contains("valid UUID"));
+    }
+}

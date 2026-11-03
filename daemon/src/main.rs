@@ -14,7 +14,8 @@ use reincore::daemon::{show_status, start_daemon, stop_daemon};
 use reincore::launch::handle_launch;
 use reincore::provider::handle_provider_command;
 use reincore::session::{
-    handle_compress, handle_config, handle_pause, handle_resume, handle_sessions,
+    handle_compress, handle_config, handle_export_timeline, handle_pause, handle_resume,
+    handle_sessions,
 };
 use reincore::telemetry_cmd::handle_telemetry_command;
 
@@ -118,6 +119,10 @@ async fn main() -> Result<()> {
         Commands::Sessions { path, checkpoints } => {
             let config = DaemonConfig::load();
             handle_sessions(path, checkpoints, config.host, config.port).await
+        }
+        Commands::Export { session, output } => {
+            let config = DaemonConfig::load();
+            handle_export_timeline(session, output, config.host, config.port).await
         }
         Commands::Provider { command } => handle_provider_command(command).await,
         Commands::Launch {
