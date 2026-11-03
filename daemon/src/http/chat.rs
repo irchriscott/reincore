@@ -1724,6 +1724,13 @@ async fn chat_completions_inner(
         )
             .into_response());
     }
+    if engine_core::user_content::is_client_reminder_observer_request(&req) {
+        return Ok((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(engine_core::user_content::client_reminder_observer_error()),
+        )
+            .into_response());
+    }
     // Measure elapsed request processing from before normalization and session
     // resolution, so timing includes preparation as well as provider execution.
     let request_started = std::time::Instant::now();
@@ -3043,6 +3050,13 @@ async fn chat_completions_single_provider_inner(
         return Ok((
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(engine_core::user_content::client_compaction_error()),
+        )
+            .into_response());
+    }
+    if engine_core::user_content::is_client_reminder_observer_request(&req) {
+        return Ok((
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(engine_core::user_content::client_reminder_observer_error()),
         )
             .into_response());
     }

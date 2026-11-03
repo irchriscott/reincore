@@ -1649,6 +1649,18 @@ async fn launch_app(
         None
     };
 
+    // 8b. Register the working directory as a local project on the daemon
+    // (fresh or reused) so sessions opened from the launched app attribute
+    // to the active path under the latest folder name. Best-effort: the app
+    // can still run without it.
+    if let Some(dir) = working_dir.as_deref() {
+        if let Err(error) =
+            reincore::launch::ensure_launch_project(&config.host, config.port, dir).await
+        {
+            tracing::warn!("could not register launch project: {}", error);
+        }
+    }
+
     // 9. Spawn the app in a new terminal window.
     if !reincore::launch::is_app_installed(&app_label) {
         let hint = reincore::launch::install_hint_for_app(&app_label)

@@ -194,7 +194,18 @@ pub fn session_tasks(events: &[SessionEvent]) -> Vec<SessionTask> {
 /// Build the small, task-aware projection used for the initial session page.
 /// This is intentionally separate from the audit log response so very large
 /// model transcripts never need to be serialized into the page bootstrap.
+///
+/// Durable `continuation` snapshots are execution state, not user-visible
+/// activity: the settlement path rewrites them after nearly every tool call,
+/// so counting them here turns every tool loop into timeline spam. They stay
+/// in the full event log; the timeline only projects everything else.
 pub fn session_timeline(events: &[SessionEvent]) -> SessionTimeline {
+    let visible: Vec<SessionEvent> = events
+        .iter()
+        .filter(|event| event.event_type != SessionEventType::Continuation)
+        .cloned()
+        .collect();
+    let events = &visible;
     let tasks = session_tasks(events);
     let mut request_groups = tasks
         .iter()
@@ -1273,6 +1284,33 @@ mod tests {
         assert_eq!(request.models, vec!["test-model"]);
         assert_eq!(request.pii_redaction_count, 0);
         assert_eq!(timeline.pii_redaction_count, 0);
+    }
+
+    #[test]
+    fn timeline_ignores_durable_continuation_snapshots() {
+        let llm = event(1, "task-1", "Do the work", "group-1", "Do the work");
+        // Settlement rewrites a continuation snapshot after nearly every tool
+        // call; none of them may surface as timeline activity.
+        let continuations = (2..=6).map(|seq| SessionEvent {
+            session_id: Uuid::nil(),
+            seq,
+            event_type: SessionEventType::Continuation,
+            payload: serde_json::json!({
+                "task_id": "task-1",
+                "request_group_id": "group-1",
+            }),
+            cost_cents: None,
+            created_at: Utc::now(),
+        });
+        let mut events = vec![llm];
+        events.extend(continuations);
+
+        let timeline = session_timeline(&events);
+
+        assert_eq!(timeline.total_event_count, 1);
+        assert_eq!(timeline.latest_seq, Some(1));
+        assert_eq!(timeline.request_groups.len(), 1);
+        assert_eq!(timeline.request_groups[0].event_count, 1);
     }
 
     #[test]

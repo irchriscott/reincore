@@ -222,6 +222,9 @@ function projectLiveTimeline(
 ): { timeline: SessionTimelineSummary; activeRequestId?: string; activeTaskId?: string; activeSeq?: number } {
   const pending = liveEvents
     .filter((event) => event.seq > (timeline.latest_seq ?? 0))
+    // Durable continuation snapshots are execution state, not user-visible
+    // activity; the backend timeline projection excludes them too.
+    .filter((event) => event.event_type !== 'continuation')
     .sort((left, right) => left.seq - right.seq)
   if (pending.length === 0) return { timeline }
 
@@ -365,6 +368,7 @@ function buildRequestGroups(events: SessionEvent[]): RequestGroup[] {
   let previousLlmRequestedFunctions = false
 
   for (const event of [...events].sort((left, right) => left.seq - right.seq)) {
+    if (event.event_type === 'continuation') continue
     if (event.event_type !== 'llm_call') {
       const requestGroupId = stringValue(event.payload.request_group_id)
       const target = requestGroupId ? byRequestGroupId.get(requestGroupId) : undefined

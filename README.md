@@ -357,7 +357,7 @@ cargo run --bin reincore -- provider models openai
 
 Launch a coding/agent app and automatically route its requests through a reincore single-provider proxy. The app is spawned in a new terminal tab/window so reincore can keep running in the original terminal and the user can see proxy logs.
 
-For apps with a known config mechanism (Codex, Claude Code, Aider, Gemini CLI, Open Code, OpenClaw), reincore also persistently updates the app's own config file so it keeps routing through reincore even when launched outside of `reincore launch` - until you run `reincore <app> --restore`.
+For apps with a known config mechanism (Codex, Claude Code, Aider, Gemini CLI, Open Code, OpenClaw), reincore also persistently updates the app's own config file so it keeps routing through reincore even when launched outside of `reincore launch` - until you run `reincore <app> --restore`. Muse Code takes its endpoint exclusively via CLI flags, so it is always launched through `reincore launch muse` with no persistent profile.
 
 ```bash
 # Launch Claude Code with the default Anthropic provider
@@ -367,7 +367,7 @@ cargo run --bin reincore -- launch claude
 cargo run --bin reincore -- launch codex
 
 # Launch an app with a different provider
-cargo run --bin reincore -- launch codex --provider groq
+cargo run --bin reincore -- launch muse --provider ollama
 
 # Use a custom port
 cargo run --bin reincore -- launch cursor --port 8789
@@ -395,6 +395,7 @@ Supported apps and their default providers:
 | `windsurf` | `openai` | `OPENAI_BASE_URL`, `OPENAI_API_KEY` | - |
 | `aider` | `openai` | `OPENAI_BASE_URL`, `OPENAI_API_KEY` | `~/.aider.conf.yml` |
 | `continue` | `openai` | `OPENAI_BASE_URL`, `OPENAI_API_KEY` | - |
+| `muse` | `meta` | - (flag driven: `--provider meta --base-url <proxy> --model reincore-auto`) | - (no config file; pass `--base-url` every time) |
 | `ollama` | `ollama` | - (provider, not a client app) | - (see [Ollama (local + cloud)](#ollama-local--cloud)) |
 
 ##### API modes (`--mode`)
@@ -412,7 +413,7 @@ When you launch with `--mode chat`, the app uses the standard `/v1/chat/completi
 
 Both modes run through the same reincore engine - the only difference is the wire format the client app uses to talk to the proxy.
 
-> **Note:** Codex/Open Code integrations are pinned to the Responses API. For these apps, reincore always uses the `responses` wire API regardless of the `--mode` flag. The `--mode chat` option is available for apps that still support the Chat Completions API. For Open Code, the wire mode selects the AI SDK package written into `opencode.json` (`@ai-sdk/openai` for `responses`, `@ai-sdk/openai-compatible` for `chat`). OpenClaw only speaks the OpenAI Chat Completions wire (`api: "openai-completions"`), so it is always launched in `chat` mode.
+> **Note:** Codex/Open Code/Muse Code integrations are pinned to the Responses API. For these apps, reincore always uses the `responses` wire API regardless of the `--mode` flag. The `--mode chat` option is available for apps that still support the Chat Completions API. For Open Code, the wire mode selects the AI SDK package written into `opencode.json` (`@ai-sdk/openai` for `responses`, `@ai-sdk/openai-compatible` for `chat`). OpenClaw only speaks the OpenAI Chat Completions wire (`api: "openai-completions"`), so it is always launched in `chat` mode.
 
 ##### Persistent profiles
 

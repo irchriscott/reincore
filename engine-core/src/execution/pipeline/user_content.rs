@@ -117,6 +117,35 @@ pub fn client_compaction_error() -> serde_json::Value {
     }})
 }
 
+/// Recognize a client's internal reminder-observer check (e.g. Muse Code's
+/// "You are a reminder observer ..." prompt driving a
+/// `submit_reminder_decision` tool call). These checks are client-side
+/// housekeeping, not user requests: they must never open sessions, run
+/// providers, or appear in the timeline. Both markers are required so an
+/// ordinary user message that merely mentions reminders is unaffected.
+pub fn is_client_reminder_observer_request(request: &ChatCompletionRequest) -> bool {
+    request.messages.iter().any(|message| {
+        if message.tool_call_id.is_some() {
+            return false;
+        }
+        if !(message.role.eq_ignore_ascii_case("system")
+            || message.role.eq_ignore_ascii_case("user"))
+        {
+            return false;
+        }
+        let text = message.full_text().to_ascii_lowercase();
+        text.contains("reminder observer") && text.contains("submit_reminder_decision")
+    })
+}
+
+pub fn client_reminder_observer_error() -> serde_json::Value {
+    serde_json::json!({"error": {
+        "type": "invalid_request_error",
+        "code": "client_reminder_check_disabled",
+        "message": "ReinCore does not run client reminder-observer checks through the proxy. Treat the check as decision=none and continue the main conversation."
+    }})
+}
+
 pub const TERMINAL_NOTIFICATION_TOOL: &str = "reincore_terminal_notification";
 
 /// Synthetic protocol calls correlate VS Code terminal notifications with the
@@ -825,6 +854,28 @@ mod tests {
     fn request_markup_quoted_inside_external_summary_is_ignored() {
         let mixed = "<conversation-summary>Earlier input: <userRequest>old request</userRequest></conversation-summary>\n<userRequest>new request</userRequest>";
         assert_eq!(session_user_request(mixed), Some("new request"));
+    }
+
+    #[test]
+    fn reminder_observer_check_is_detected_without_touching_normal_prompts() {
+        let reminder = "You are a reminder observer for the main agent. Do not answer the user. Record exactly one decision this round by calling submit_reminder_decision. Use decision=\"remind\" only when the remind condition stated in your duty is met; otherwise use decision=\"none\".";
+        assert!(is_client_reminder_observer_request(&request(vec![message(
+            reminder
+        )])));
+
+        // Either marker alone is not enough: ordinary user text stays routable.
+        assert!(!is_client_reminder_observer_request(&request(vec![
+            message("Remind me to water the plants tomorrow"),
+        ])));
+        assert!(!is_client_reminder_observer_request(&request(vec![
+            message("Call submit_reminder_decision when the build finishes"),
+        ])));
+        // Model output mentioning the mechanism is not a client check either.
+        let mut assistant_echo = message(reminder);
+        assistant_echo.role = "assistant".to_string();
+        assert!(!is_client_reminder_observer_request(&request(vec![
+            assistant_echo
+        ])));
     }
 
     #[test]

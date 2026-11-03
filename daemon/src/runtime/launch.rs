@@ -2077,6 +2077,53 @@ fn wait_for_proxy_ready(host: &str, port: u16, timeout: Duration) -> bool {
     false
 }
 
+/// Project name for a launch working directory: the latest folder name.
+/// Falls back to `"reincore"` for roots or non-UTF-8 names.
+pub fn launch_project_name(path: &Path) -> String {
+    path.file_name()
+        .and_then(|part| part.to_str())
+        .filter(|part| !part.is_empty())
+        .unwrap_or("reincore")
+        .to_string()
+}
+
+/// Register the launch working directory as a local project on the running
+/// daemon so sessions opened from the launched app attribute to it. The
+/// project name is the latest folder name. A `409 CONFLICT` (already
+/// assigned) counts as success; any other failure is returned so the caller
+/// can warn without aborting the launch.
+pub async fn ensure_launch_project(host: &str, port: u16, path: &Path) -> Result<()> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+        .unwrap_or_default();
+    let response = client
+        .post(format!(
+            "http://{}:{}/v1/local-projects",
+            host.trim_end_matches('/'),
+            port
+        ))
+        .json(&serde_json::json!({
+            "name": launch_project_name(path),
+            "project_path": path.to_string_lossy(),
+        }))
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("could not reach the daemon to register the project: {}", e))?;
+    if response.status().is_success()
+        || response.status() == reqwest::StatusCode::CONFLICT
+    {
+        return Ok(());
+    }
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    Err(anyhow::anyhow!(
+        "daemon refused to register the project ({}): {}",
+        status,
+        body.chars().take(300).collect::<String>()
+    ))
+}
+
 /// Validate or create the working directory for launching an app.
 /// If the path doesn't exist, prompt the user interactively to create it.
 /// Returns the resolved path, or an error if the user declines / the path
@@ -3299,6 +3346,16 @@ pub async fn handle_launch(args: LaunchArgs) -> Result<()> {
         );
     }
 
+    // Register the launch working directory as a local project on the
+    // daemon (fresh or reused) so sessions opened from the launched app
+    // attribute to the active path under the latest folder name.
+    // Best-effort: a warning is enough, the app can still run.
+    if let Some(dir) = launch_path.as_deref() {
+        if let Err(e) = ensure_launch_project(&host, port, dir).await {
+            eprintln!("{}", log::warning(&format!("{}", e)));
+        }
+    }
+
     // On Windows, the Claude Code installer places `claude.exe` in
     // `~/.local/bin` but does not add that directory to PATH. Detect that
     // situation and patch up PATH for this process so the launch succeeds,
@@ -3465,6 +3522,20 @@ pub async fn handle_launch(args: LaunchArgs) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn launch_project_name_uses_latest_folder() {
+        assert_eq!(
+            launch_project_name(Path::new("/workspace/my-app")),
+            "my-app"
+        );
+        assert_eq!(
+            launch_project_name(Path::new("/workspace/my-app/")),
+            "my-app"
+        );
+        // Roots and empty names fall back instead of producing a blank project.
+        assert_eq!(launch_project_name(Path::new("/")), "reincore");
+    }
 
     #[test]
     fn muse_launch_defaults_to_meta() {
