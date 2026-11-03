@@ -895,14 +895,14 @@ pub(crate) mod tests {
         // `api_key = sk_live_...` without quotes is a bare name to the
         // parser, but nothing binds it: it must stay a secret candidate in
         // known-language mode exactly as in Auto mode.
-        let source = "api_key = sk_live_4eC39HqLyjWDarjtT1zdp7dc\n";
+        let source = "api_key = sk_live_aaaaaaaaaaaaaaaaaaaaaaaa\n";
         for hint in [SourceHint::from_path("auth.py"), SourceHint::Auto] {
             let references = SourceReferences::analyze(source, hint);
             let start = source.find("sk_live").unwrap();
             assert!(
                 !references.recognizes(
                     start,
-                    start + "sk_live_4eC39HqLyjWDarjtT1zdp7dc".len(),
+                    start + "sk_live_aaaaaaaaaaaaaaaaaaaaaaaa".len(),
                     true
                 ),
                 "{hint:?}: unbound name must not be a definite reference"
