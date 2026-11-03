@@ -1,4 +1,64 @@
-# reincore-engine
+<h1 align="center">ReinCore</h1>
+
+<p align="center">
+  <strong>Guided, never stopped.</strong><br>
+  Run your agents through ReinCore.
+</p>
+
+## What is ReinCore?
+
+ReinCore is a session-aware gateway for AI agents. It sits between an agent framework (Claude Code, Codex, LangGraph, CrewAI, AutoGen, custom MCP-based agents) and the LLM providers and MCP tool servers those agents call.
+
+Existing gateways optimize the call. ReinCore optimizes the task. It understands that ten or two hundred calls belong to one session working toward one goal. It predicts cost before a run, degrades gracefully instead of hard-stopping, caches tool calls across session history, and resumes where it left off when a budget or connection is interrupted.
+
+Its rule is simple: guided, never stopped. Budgets lower the cost profile of later steps instead of destroying progress. Loop detection redirects the agent instead of killing the session. State is serialized so work is resumable.
+
+### For consumers (people/companies that use agents)
+
+- Run agents cheaper. Prompt-prefix normalization and tool-result memoization cut repeated token and tool spend.
+- Set a budget without fear. Sessions degrade to cheaper models instead of stopping mid-task, and checkpoints let you pause and resume.
+- Keep one local setup. A single daemon works with Muse Code, Claude Code, Codex, Cursor, Gemini CLI, Aider, and other OpenAI-compatible clients.
+- See what you spent. Per-session usage, versioned cost receipts, and Prometheus metrics show where money went.
+
+### For developers who build agents
+
+- Drop it in with no rewrite. The daemon exposes an OpenAI-compatible HTTP API.
+- Control routing per task. Global routing policies plus per-request escape hatches select provider and model.
+- Manage long sessions. Sessions, checkpoints, compaction, and durable completion accounting are built in.
+- Debug agent behavior. Outcome diagnostics separate completion from success, with prediction error and cache-utilization fields, plus request logging and framework adapters for LangGraph, CrewAI, and AutoGen.
+
+### For LLM providers who train LLMs
+
+- See task-level behavior, not isolated calls. Session-scoped traces show how models act across multi-step goals.
+- Get structured outcome signals. Completion, explicit success reports, prediction error, and token-weighted cache utilization are recorded as distinct diagnostic fields.
+- Observe real cost and reliability pressure. Routing, budget-degradation, and cache-hit metrics reveal where models waste tokens, loop, or fail under constraints.
+
+## Security, privacy, and agent health
+
+### Security
+
+- Every tool call passes a deterministic action gate. Admin-owned rules and JSON-schema checks decide what runs; batches are capped at 64 calls and 1 MB of arguments per call.
+- Mandatory authorization boundaries cannot be downgraded. A withheld action reports why it was stopped instead of failing silently.
+- MCP servers must use HTTPS. Plain HTTP is accepted only on numeric loopback for local servers.
+- Provider keys and OAuth tokens live in `~/.reincore-io/credentials.json`, restricted to the current user (0600 on Unix).
+
+### Privacy
+
+- Local-first by default. The daemon and its SQLite database run on your laptop and bind to `127.0.0.1`. The optional Prometheus endpoint is loopback-only.
+- Secrets are redacted before they cross a trust boundary. One policy covers provider requests, tool execution, logs, and stored events. Placeholders are marked as non-credentials, and execution continues instead of stopping.
+- PII is masked as well. Free text is scanned for emails, phone numbers, valid US SSNs, IP addresses, and Luhn-checked card numbers. Names, addresses, and birth dates are covered through structured argument keys instead of patterns, so code rarely trips a false match. Each sanitized event records its PII catch count for the activity timeline.
+- Retention is operator-controlled. Session payloads can be pruned while ledger rows survive for accounting.
+
+### Agent health
+
+- Every turn is scanned for tool loops, unknown tools, malformed or duplicate calls, prompt injection in tool output, and ungrounded citations. Findings are graded Warning or Critical, and a session pauses before the next provider call when needed.
+- The circuit breaker is progress-aware. Already-satisfied reads are answered with a pointer to the existing transcript, genuine progress decays the redundancy score, and loops trigger escalation or a corrective message instead of a kill.
+- Completion and success are recorded separately, with prediction error and cache utilization as distinct fields, plus an event log and action receipts for audit.
+- Overload is handled with fail-fast admission and a retry signal, and checkpoints with resumable tokens preserve work across budget or connection interruptions.
+
+## Built with
+
+ReinCore was built with Muse Code, the agentic coding CLI, running Meta's Muse models. Muse Spark and Muse Wonder from that same lineup also ship in the product: both are listed in the provider model catalog, Muse Wonder (`muse-wonder-1.0`) is the default judge for opt-in LLM detection mode, and `reincore launch muse` routes Muse Code itself through the daemon.
 
 The Rust workspace that powers ReinCore. It contains five crates:
 
