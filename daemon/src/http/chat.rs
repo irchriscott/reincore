@@ -47,6 +47,42 @@ pub(super) async fn extract_json_response(
     Ok((json, response_headers))
 }
 
+/// Synthetic `decision=none` completion for client reminder-observer checks.
+///
+/// Muse Code fires these housekeeping checks alongside the real turn. They
+/// must never reach a provider, open a session, or show up as errors: answer
+/// locally with the decision the client prompt itself defaults to.
+fn reminder_observer_quiet_response(model: &str) -> serde_json::Value {
+    // Quiet local answer: no provider, no session, no error.
+    json!({
+        "id": format!("chatcmpl-{}", Uuid::new_v4()),
+        "object": "chat.completion",
+        "created": chrono::Utc::now().timestamp(),
+        "model": model,
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": null,
+                "tool_calls": [{
+                    "id": format!("call_{}", Uuid::new_v4().simple()),
+                    "type": "function",
+                    "function": {
+                        "name": "submit_reminder_decision",
+                        "arguments": "{\"decision\":\"none\"}"
+                    }
+                }]
+            },
+            "finish_reason": "tool_calls"
+        }],
+        "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0
+        }
+    })
+}
+
 pub(super) fn with_provider_rate_limit_headers(
     mut response: axum::response::Response,
     headers: &engine_core::ProviderResponseHeaders,
@@ -1725,11 +1761,8 @@ async fn chat_completions_inner(
             .into_response());
     }
     if engine_core::user_content::is_client_reminder_observer_request(&req) {
-        return Ok((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(engine_core::user_content::client_reminder_observer_error()),
-        )
-            .into_response());
+        let model = req.model.clone();
+        return Ok(Json(reminder_observer_quiet_response(&model)).into_response());
     }
     // Measure elapsed request processing from before normalization and session
     // resolution, so timing includes preparation as well as provider execution.
@@ -3054,11 +3087,8 @@ async fn chat_completions_single_provider_inner(
             .into_response());
     }
     if engine_core::user_content::is_client_reminder_observer_request(&req) {
-        return Ok((
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(engine_core::user_content::client_reminder_observer_error()),
-        )
-            .into_response());
+        let model = req.model.clone();
+        return Ok(Json(reminder_observer_quiet_response(&model)).into_response());
     }
     // Measure elapsed request processing from before normalization and session
     // resolution, so timing includes preparation as well as provider execution.

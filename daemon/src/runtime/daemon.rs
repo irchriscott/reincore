@@ -109,6 +109,17 @@ async fn verified_otel_endpoint(
 /// **Verbose only** (`--verbose` / debug level):
 /// - Full request headers (with sensitive headers redacted) and body.
 /// - Full response headers and body.
+/// True when the body is a client reminder-observer housekeeping check.
+///
+/// Muse Code fires these alongside the real turn. They are answered locally
+/// with a synthetic `decision=none`, so logging them only adds noise. Both
+/// markers are required, mirroring the handler filter, so ordinary user
+/// messages that merely mention reminders are still logged.
+fn is_quiet_housekeeping_body(body: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(body).to_ascii_lowercase();
+    text.contains("reminder observer") && text.contains("submit_reminder_decision")
+}
+
 async fn log_request(req: Request, next: Next) -> Response {
     let method = req.method().clone();
     let uri = req.uri().clone();
@@ -137,7 +148,10 @@ async fn log_request(req: Request, next: Next) -> Response {
         }
     };
 
-    if verbose {
+    // Reminder-observer housekeeping is answered locally; keep it out of the
+    // logs entirely.
+    let quiet_housekeeping = is_quiet_housekeeping_body(&body_bytes);
+    if verbose && !quiet_housekeeping {
         let headers = &parts.headers;
         let body_str = String::from_utf8_lossy(&body_bytes);
 
@@ -213,6 +227,7 @@ async fn log_request(req: Request, next: Next) -> Response {
 
     let http_ver = format!("{:?}", http_version).dimmed();
 
+    if !quiet_housekeeping {
     println!(
         "{}  {} {} {} → {}",
         timestamp().dimmed(),
@@ -221,6 +236,7 @@ async fn log_request(req: Request, next: Next) -> Response {
         http_ver,
         status_colored,
     );
+    }
 
     // Verbose: log the response headers and body.
     if verbose && !status.is_success() {
