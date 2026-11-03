@@ -2253,10 +2253,50 @@ mod batch_tests {
             .findings
             .iter()
             .all(|finding| finding.kind != crate::AgentHealthKind::UnknownTool));
-        // The namespace mapping itself is audit detail, not a detection.
+        // The leaf after the namespace is the exact contract name, so the
+        // mapping is unambiguous and records no finding at all.
+        assert!(report
+            .findings
+            .iter()
+            .all(|finding| { finding.kind != crate::AgentHealthKind::ToolNamespaceAlias }));
+    }
+
+    #[test]
+    fn canonical_only_namespaced_alias_still_warns() {
+        // The contract entry is `execute_command`; the model addresses it as
+        // `muse.execute`. The leaf is not the exact contract name, so the
+        // mapping stays visible as a warning even though the call validates.
+        let request: ChatCompletionRequest = serde_json::from_value(json!({
+            "model": "test",
+            "messages": [],
+            "tools": [{"name": "execute_command", "parameters": {"type": "object"}}]
+        }))
+        .unwrap();
+        let definitions = request.tools.clone().unwrap_or_default();
+        let call = ToolCall {
+            id: "shell-1".to_string(),
+            call_type: "function".to_string(),
+            function: crate::FunctionCall {
+                name: "muse.execute".to_string(),
+                arguments: "{}".to_string(),
+            },
+        };
+        assert!(validate_call(&call, &definitions).is_ok());
+        let response: ChatMessage = serde_json::from_value(json!({
+            "role": "assistant",
+            "content": null,
+            "tool_calls": [{
+                "id": "shell-1",
+                "type": "function",
+                "function": {"name": "muse.execute", "arguments": "{}"}
+            }]
+        }))
+        .unwrap();
+        let report = crate::agent_health::analyze_provider_response(&request, &response);
+        assert!(!report.should_stop);
         assert!(report.findings.iter().any(|finding| {
             finding.kind == crate::AgentHealthKind::ToolNamespaceAlias
-                && finding.tool_name.as_deref() == Some("muse.read_file")
+                && finding.tool_name.as_deref() == Some("muse.execute")
         }));
     }
 

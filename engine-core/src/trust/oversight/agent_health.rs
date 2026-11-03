@@ -29,10 +29,11 @@ pub enum AgentHealthKind {
     /// identical to a session where nothing happened. Always `Warning`.
     RedundantLookup,
     UnknownTool,
-    /// The model addressed a contract tool through an agent namespace
-    /// (`muse.read_file` for contract `read_file`). The call mapped to its
-    /// unique contract target and validated normally. Always `Warning`: the
-    /// mapping is audit detail, not a detection, and never stops the turn.
+    /// The model addressed a contract tool through an agent namespace whose
+    /// leaf is not the exact contract name (`muse.execute` for contract
+    /// `execute_command`). An exact leaf (`muse.read_file` for `read_file`)
+    /// is unambiguous and records no finding. Always `Warning`: the mapping
+    /// is audit detail, not a detection, and never stops the turn.
     ToolNamespaceAlias,
     MalformedToolArguments,
     DuplicateToolCall,
@@ -1637,9 +1638,10 @@ pub fn analyze_provider_response_with_schema_policy(
             continue;
         }
         // Exact contract names win. A dotted agent-namespace alias
-        // (`muse.read_file`) resolves to its unique canonical definition
-        // and is recorded as audit detail; unknown or ambiguous names stop
-        // the turn exactly as before.
+        // (`muse.read_file`) resolves to its unique canonical definition;
+        // unknown or ambiguous names stop the turn exactly as before. An
+        // alias whose leaf is the exact contract name is unambiguous and
+        // resolves silently; only canonical-only aliases are recorded.
         let known_tool = match crate::execution::pipeline::tool_names::match_contract_tool(
             request.tools.as_deref().unwrap_or_default(),
             call.function.name.as_str(),
@@ -1648,15 +1650,19 @@ pub fn analyze_provider_response_with_schema_policy(
                 tool,
                 crate::execution::pipeline::tool_names::ContractNameMatch::NamespaceAlias,
             )) => {
-                report.findings.push(AgentHealthFinding {
-                    kind: AgentHealthKind::ToolNamespaceAlias,
-                    severity: AgentHealthSeverity::Warning,
-                    message: format!(
-                        "model requested namespaced tool '{}', mapped to contract tool '{}'",
-                        call.function.name, tool.name
-                    ),
-                    tool_name: Some(call.function.name.clone()),
-                });
+                if crate::execution::pipeline::tool_names::leaf(call.function.name.as_str())
+                    != tool.name
+                {
+                    report.findings.push(AgentHealthFinding {
+                        kind: AgentHealthKind::ToolNamespaceAlias,
+                        severity: AgentHealthSeverity::Warning,
+                        message: format!(
+                            "model requested namespaced tool '{}', mapped to contract tool '{}'",
+                            call.function.name, tool.name
+                        ),
+                        tool_name: Some(call.function.name.clone()),
+                    });
+                }
                 Some(tool)
             }
             Ok((tool, _)) => Some(tool),

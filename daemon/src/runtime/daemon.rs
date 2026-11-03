@@ -109,15 +109,17 @@ async fn verified_otel_endpoint(
 /// **Verbose only** (`--verbose` / debug level):
 /// - Full request headers (with sensitive headers redacted) and body.
 /// - Full response headers and body.
-/// True when the body is a client reminder-observer housekeeping check.
+/// True when the body is client housekeeping: a reminder-observer check or a
+/// feature-tip pick.
 ///
 /// Muse Code fires these alongside the real turn. They are answered locally
-/// with a synthetic `decision=none`, so logging them only adds noise. Both
-/// markers are required, mirroring the handler filter, so ordinary user
-/// messages that merely mention reminders are still logged.
+/// (synthetic `decision=none` / `NONE`), so logging them only adds noise.
+/// Both markers are required per check, mirroring the handler filters, so
+/// ordinary user messages are still logged.
 fn is_quiet_housekeeping_body(body: &[u8]) -> bool {
     let text = String::from_utf8_lossy(body).to_ascii_lowercase();
-    text.contains("reminder observer") && text.contains("submit_reminder_decision")
+    (text.contains("reminder observer") && text.contains("submit_reminder_decision"))
+        || (text.contains("feature tip") && text.contains("reply with exactly that tip's id"))
 }
 
 async fn log_request(req: Request, next: Next) -> Response {

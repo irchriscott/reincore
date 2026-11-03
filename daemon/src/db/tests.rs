@@ -2101,7 +2101,10 @@ fn project_scoped_listing_includes_in_flight_session_without_events() {
 
     // Unscoped listings still hide event-less sessions; the project page must
     // already show its in-flight session with live 0-token totals.
-    assert!(db.list_sessions(&SessionFilter::default()).unwrap().is_empty());
+    assert!(db
+        .list_sessions(&SessionFilter::default())
+        .unwrap()
+        .is_empty());
     let rows = db
         .list_sessions(&SessionFilter {
             project_id: Some(&project.to_string()),

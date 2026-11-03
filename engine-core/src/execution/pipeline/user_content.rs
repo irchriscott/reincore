@@ -138,6 +138,27 @@ pub fn is_client_reminder_observer_request(request: &ChatCompletionRequest) -> b
     })
 }
 
+/// Recognize a client's internal feature-tip picker (e.g. Muse Code's
+/// "You are picking one optional feature tip ..." prompt). These picks are
+/// client-side housekeeping, not user requests: they must never open
+/// sessions, run providers, or appear in the timeline. Both markers are
+/// required so an ordinary user message that merely mentions tips, or that
+/// asks for an exact-id reply, is unaffected.
+pub fn is_client_feature_tip_request(request: &ChatCompletionRequest) -> bool {
+    request.messages.iter().any(|message| {
+        if message.tool_call_id.is_some() {
+            return false;
+        }
+        if !(message.role.eq_ignore_ascii_case("system")
+            || message.role.eq_ignore_ascii_case("user"))
+        {
+            return false;
+        }
+        let text = message.full_text().to_ascii_lowercase();
+        text.contains("feature tip") && text.contains("reply with exactly that tip's id")
+    })
+}
+
 pub fn client_reminder_observer_error() -> serde_json::Value {
     serde_json::json!({"error": {
         "type": "invalid_request_error",
@@ -874,6 +895,26 @@ mod tests {
         let mut assistant_echo = message(reminder);
         assistant_echo.role = "assistant".to_string();
         assert!(!is_client_reminder_observer_request(&request(vec![
+            assistant_echo
+        ])));
+    }
+
+    #[test]
+    fn feature_tip_check_is_detected_without_touching_normal_prompts() {
+        let tip = "You are picking one optional feature tip for a user who just finished a turn and is idle. Below is a list of candidate tips, each with an id and a note about when it helps. Choose the ONE tip most helpful to this user right now, judging from the conversation so far. Reply with exactly that tip's id and nothing else. If no tip is clearly helpful, reply exactly NONE.\n\nfile-mentions: user types or pastes file paths by hand or refers to specific files";
+        assert!(is_client_feature_tip_request(&request(vec![message(tip)])));
+
+        // Either marker alone is not enough: ordinary user text stays routable.
+        assert!(!is_client_feature_tip_request(&request(vec![message(
+            "Any feature tip for Python beginners?"
+        ),])));
+        assert!(!is_client_feature_tip_request(&request(vec![message(
+            "Reply with exactly that tip's id when you find it"
+        ),])));
+        // Model output mentioning the mechanism is not a client check either.
+        let mut assistant_echo = message(tip);
+        assistant_echo.role = "assistant".to_string();
+        assert!(!is_client_feature_tip_request(&request(vec![
             assistant_echo
         ])));
     }

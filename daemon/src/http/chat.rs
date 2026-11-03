@@ -83,6 +83,34 @@ fn reminder_observer_quiet_response(model: &str) -> serde_json::Value {
     })
 }
 
+/// Synthetic NONE completion for client feature-tip pickers.
+///
+/// Muse Code fires these idle-time housekeeping picks alongside the real
+/// conversation. They must never reach a provider, open a session, or show
+/// up as errors: answer locally with the prompt's own neutral default.
+/// Tip delivery through the proxy is disabled.
+fn feature_tip_quiet_response(model: &str) -> serde_json::Value {
+    // Quiet local answer: no provider, no session, no error.
+    json!({
+        "id": format!("chatcmpl-{}", Uuid::new_v4()),
+        "object": "chat.completion",
+        "created": chrono::Utc::now().timestamp(),
+        "model": model,
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "content": "NONE"
+            },
+            "finish_reason": "stop"
+        }],
+        "usage": {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0
+        }
+    })
+}
 pub(super) fn with_provider_rate_limit_headers(
     mut response: axum::response::Response,
     headers: &engine_core::ProviderResponseHeaders,
@@ -1764,6 +1792,10 @@ async fn chat_completions_inner(
         let model = req.model.clone();
         return Ok(Json(reminder_observer_quiet_response(&model)).into_response());
     }
+    if engine_core::user_content::is_client_feature_tip_request(&req) {
+        let model = req.model.clone();
+        return Ok(Json(feature_tip_quiet_response(&model)).into_response());
+    }
     // Measure elapsed request processing from before normalization and session
     // resolution, so timing includes preparation as well as provider execution.
     let request_started = std::time::Instant::now();
@@ -3089,6 +3121,10 @@ async fn chat_completions_single_provider_inner(
     if engine_core::user_content::is_client_reminder_observer_request(&req) {
         let model = req.model.clone();
         return Ok(Json(reminder_observer_quiet_response(&model)).into_response());
+    }
+    if engine_core::user_content::is_client_feature_tip_request(&req) {
+        let model = req.model.clone();
+        return Ok(Json(feature_tip_quiet_response(&model)).into_response());
     }
     // Measure elapsed request processing from before normalization and session
     // resolution, so timing includes preparation as well as provider execution.

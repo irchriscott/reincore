@@ -253,6 +253,89 @@ async fn client_reminder_check_is_answered_quietly_without_provider_calls() {
     }
 }
 
+#[tokio::test]
+async fn client_feature_tip_is_answered_quietly_without_provider_calls() {
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    struct Probe {
+        config: engine_core::ProviderConfig,
+        calls: Arc<AtomicUsize>,
+    }
+    #[async_trait::async_trait]
+    impl engine_core::Provider for Probe {
+        fn label(&self) -> &str {
+            "test"
+        }
+        fn config(&self) -> &engine_core::ProviderConfig {
+            &self.config
+        }
+        async fn list_models(&self) -> engine_core::EngineResult<Vec<engine_core::ProviderModel>> {
+            Ok(vec![])
+        }
+        async fn complete(
+            &self,
+            _: &ChatCompletionRequest,
+        ) -> engine_core::EngineResult<engine_core::ChatCompletionResponse> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Err(engine_core::EngineError::Provider(
+                "maintenance must not invoke provider".into(),
+            ))
+        }
+    }
+    let calls = Arc::new(AtomicUsize::new(0));
+    let single = SingleProviderAppState::new_with_project_path(
+        LocalDatabase::open_in_memory().unwrap(),
+        Arc::new(Probe {
+            config: Default::default(),
+            calls: calls.clone(),
+        }),
+        None,
+    );
+    let multi = AppState::new_with_project_path(LocalDatabase::open_in_memory().unwrap(), None);
+    let prompt = "You are picking one optional feature tip for a user who just finished a turn and is idle. Below is a list of candidate tips, each with an id and a note about when it helps. Choose the ONE tip most helpful to this user right now, judging from the conversation so far. Reply with exactly that tip's id and nothing else. If no tip is clearly helpful, reply exactly NONE.\n\nfile-mentions: user types or pastes file paths by hand or refers to specific files";
+    let req: ChatCompletionRequest = serde_json::from_value(json!({
+        "model":"reincore-auto", "messages":[{"role":"user","content":prompt}],
+        "reincore_conversation_id":"muse-maintenance"
+    }))
+    .unwrap();
+    for response in [
+        chat_completions_single_provider(
+            State(single.clone()),
+            HeaderMap::new(),
+            Json(req.clone()),
+        )
+        .await
+        .unwrap(),
+        chat_completions(State(multi.clone()), HeaderMap::new(), Json(req))
+            .await
+            .unwrap(),
+    ] {
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let completion: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            completion
+                .pointer("/choices/0/message/content")
+                .and_then(|value| value.as_str()),
+            Some("NONE")
+        );
+        assert!(completion
+            .pointer("/choices/0/message/tool_calls")
+            .map_or(true, |value| value.is_null()));
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    for db in [single.db, multi.db] {
+        assert!(db
+            .list_sessions(&crate::db::SessionFilter::default())
+            .unwrap()
+            .is_empty());
+    }
+}
+
 #[test]
 fn provider_rate_limit_headers_are_forwarded_without_unrelated_headers() {
     let headers = engine_core::ProviderResponseHeaders::from([

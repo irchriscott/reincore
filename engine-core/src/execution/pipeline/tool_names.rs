@@ -34,7 +34,8 @@ impl Action {
     }
 }
 
-fn leaf(name: &str) -> &str {
+/// The name after any agent namespace prefix (`muse.edit_file` -> `edit_file`).
+pub(crate) fn leaf(name: &str) -> &str {
     name.rsplit("__")
         .next()
         .unwrap_or(name)
