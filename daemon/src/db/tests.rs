@@ -2085,6 +2085,59 @@ async fn session_filters_normalize_uuid_and_keep_fractional_end_of_day() {
         .is_empty());
 }
 
+#[test]
+fn project_scoped_listing_includes_in_flight_session_without_events() {
+    let db = LocalDatabase::open_in_memory().unwrap();
+    let project = Uuid::new_v4();
+    // Membership is fixed at creation, but the first durable event only lands
+    // after the first provider response settles: the running loop below has
+    // no events and no tokens yet.
+    let mut linked = Session::new("running loop", 100).unwrap();
+    linked.project_id = Some(project);
+    linked.project_path = Some("/workspace/demo".to_string());
+    db.insert_session(&linked).unwrap();
+    let other = Session::new("idle draft", 100).unwrap();
+    db.insert_session(&other).unwrap();
+
+    // Unscoped listings still hide event-less sessions; the project page must
+    // already show its in-flight session with live 0-token totals.
+    assert!(db.list_sessions(&SessionFilter::default()).unwrap().is_empty());
+    let rows = db
+        .list_sessions(&SessionFilter {
+            project_id: Some(&project.to_string()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, linked.id);
+}
+
+#[test]
+fn external_id_lookup_survives_mid_loop_project_registration() {
+    let db = LocalDatabase::open_in_memory().unwrap();
+    let project = Uuid::new_v4();
+    // The loop started before its working directory was registered as a
+    // project, so the row carries the path but no project id yet.
+    let mut session = Session::new("loop", 100).unwrap();
+    session.client_id = Some("local".to_string());
+    session.external_session_id = Some("ext-1".to_string());
+    session.project_path = Some("/workspace/demo".to_string());
+    db.insert_session(&session).unwrap();
+
+    // The loop's next request resolves with the project id set and the same
+    // path: it must rejoin the existing session, not fork a second one.
+    let found = db
+        .get_active_session_by_external_id("local", Some(project), "/workspace/demo", "ext-1")
+        .unwrap()
+        .expect("loop session must stay reachable after registration");
+    assert_eq!(found.id, session.id);
+    let latest = db
+        .get_latest_session_by_external_id("local", Some(project), "/workspace/demo", "ext-1")
+        .unwrap()
+        .expect("latest lookup must agree");
+    assert_eq!(latest.id, session.id);
+}
+
 #[tokio::test]
 async fn task_decision_sqlite_survives_reopen_and_filters_session_and_task() {
     let path = std::env::temp_dir().join(format!("reincore-decisions-{}.sqlite", Uuid::new_v4()));

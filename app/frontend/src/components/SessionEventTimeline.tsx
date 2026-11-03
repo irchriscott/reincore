@@ -674,6 +674,8 @@ function eventToProcessItems(event: SessionEvent): ProcessItem[] {
     }]
   }
 
+  // Durable continuation snapshots are execution state, not user-visible activity.
+  if (event.event_type === 'continuation') return []
   return [{ id: `${event.seq}-system`, event, kind: 'system', label: genericLabel(event.event_type), title: genericLabel(event.event_type), preview: genericPreview(event) }]
 }
 
@@ -1688,7 +1690,7 @@ function RequestEventList({
       })
       setEvents((current) => {
         const known = new Set(current.map((event) => event.seq))
-        return [...current, ...page.events.filter((event) => !known.has(event.seq))]
+        return [...current, ...page.events.filter((event) => !known.has(event.seq) && event.event_type !== 'continuation')]
           .sort((left, right) => left.seq - right.seq)
       })
       setNextSeq(page.next_since_seq)
@@ -1708,7 +1710,7 @@ function RequestEventList({
 
   useEffect(() => {
     const additions = liveEvents.filter((event) => (
-      event.seq >= request.first_event_seq && event.seq <= request.last_event_seq
+      event.seq >= request.first_event_seq && event.seq <= request.last_event_seq && event.event_type !== 'continuation'
     ))
     if (additions.length === 0) return
     // eslint-disable-next-line react-hooks/set-state-in-effect

@@ -267,10 +267,17 @@ impl LocalDatabase {
         // Only show sessions that have at least one event (i.e. were actually
         // used). The EXISTS subquery uses idx_session_events_session_id and
         // short-circuits after the first matching row.
-        let mut where_clauses = vec![
-            "is_subagent = 0".to_string(),
-            "EXISTS (SELECT 1 FROM session_events WHERE session_id = sessions.id)".to_string(),
-        ];
+        let mut where_clauses = vec!["is_subagent = 0".to_string()];
+        // Project membership is fixed at session creation, but the first
+        // durable event only lands after the first provider response settles.
+        // Keep event-less (in-flight) sessions visible on project-scoped
+        // listings so a running loop shows up with live 0-token totals
+        // instead of vanishing until its first call completes.
+        if filter.project_id.is_none() {
+            where_clauses.push(
+                "EXISTS (SELECT 1 FROM session_events WHERE session_id = sessions.id)".to_string(),
+            );
+        }
         let mut params: Vec<String> = Vec::new();
 
         if let Some(path) = filter.path {
@@ -461,7 +468,11 @@ impl LocalDatabase {
                     created_at, updated_at, spend_nano_usd, inherited_spend_nano_usd, unknown_cost_calls
              FROM sessions
              WHERE client_id = ?1 AND external_session_id = ?2 AND status = 'active'
-               AND ((?3 IS NOT NULL AND project_id = ?3)
+               -- A project registered mid-loop (launch working-dir registration
+               -- racing the first request) must not fork the loop into a second
+               -- session: a row filed under the same path with no project yet
+               -- belongs to the same loop.
+               AND ((?3 IS NOT NULL AND (project_id = ?3 OR (project_id IS NULL AND project_path = ?4)))
                     OR (?3 IS NULL AND project_id IS NULL AND project_path = ?4))
              ORDER BY rollover_index DESC, updated_at DESC LIMIT 1",
             params![
@@ -516,7 +527,8 @@ impl LocalDatabase {
                     created_at, updated_at, spend_nano_usd, inherited_spend_nano_usd, unknown_cost_calls
              FROM sessions
              WHERE client_id = ?1 AND external_session_id = ?2
-               AND ((?3 IS NOT NULL AND project_id = ?3)
+               -- Same mid-loop registration tolerance as the active lookup above.
+               AND ((?3 IS NOT NULL AND (project_id = ?3 OR (project_id IS NULL AND project_path = ?4)))
                     OR (?3 IS NULL AND project_id IS NULL AND project_path = ?4))
              ORDER BY rollover_index DESC, updated_at DESC LIMIT 1",
             params![
