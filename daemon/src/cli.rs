@@ -220,7 +220,7 @@ pub enum Commands {
         checkpoints: bool,
     },
 
-    /// Export a session's timeline (tasks, requests, tokens, spend) as JSON.
+    /// Export a session's timeline (tasks, requests, events with sequence, tokens, spend) as JSON.
     Export {
         /// Session UUID to export.
         #[arg(short, long)]

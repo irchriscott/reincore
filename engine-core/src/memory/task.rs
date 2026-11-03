@@ -94,13 +94,17 @@ pub struct RequestGroupOutcome {
     pub cost_efficiency_score: Option<f64>,
 }
 
-/// Lightweight session projection used by timeline clients. Raw event payloads
-/// deliberately remain out of this response and are loaded by sequence range
-/// only when the operator opens a request.
+/// Session projection used by timeline clients and session export.
+/// Timeline event payloads stay lightweight (see `read_timeline_events`);
+/// full transcripts remain behind the sequence-cursor event pages.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct SessionTimeline {
     pub tasks: Vec<SessionTask>,
     pub request_groups: Vec<RequestGroupTimelineSummary>,
+    /// Ordered timeline events (continuation snapshots excluded) with their
+    /// monotonically increasing `seq`, so export carries the full sequence.
+    #[serde(default)]
+    pub events: Vec<SessionEvent>,
     pub total_event_count: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_seq: Option<i64>,
@@ -191,20 +195,21 @@ pub fn session_tasks(events: &[SessionEvent]) -> Vec<SessionTask> {
     tasks
 }
 
-/// Build the small, task-aware projection used for the initial session page.
-/// This is intentionally separate from the audit log response so very large
-/// model transcripts never need to be serialized into the page bootstrap.
+/// Build the task-aware timeline projection used for the session page and export.
+/// The ordered timeline events (with their `seq` sequence) are included so
+/// export carries the full event sequence alongside tasks and request groups.
 ///
 /// Durable `continuation` snapshots are execution state, not user-visible
 /// activity: the settlement path rewrites them after nearly every tool call,
 /// so counting them here turns every tool loop into timeline spam. They stay
 /// in the full event log; the timeline only projects everything else.
 pub fn session_timeline(events: &[SessionEvent]) -> SessionTimeline {
-    let visible: Vec<SessionEvent> = events
+    let mut visible: Vec<SessionEvent> = events
         .iter()
         .filter(|event| event.event_type != SessionEventType::Continuation)
         .cloned()
         .collect();
+    visible.sort_by_key(|event| event.seq);
     let events = &visible;
     let tasks = session_tasks(events);
     let mut request_groups = tasks
@@ -324,6 +329,7 @@ pub fn session_timeline(events: &[SessionEvent]) -> SessionTimeline {
     SessionTimeline {
         tasks,
         request_groups,
+        events: events.clone(),
         total_event_count: events.len(),
         latest_seq: events.last().map(|event| event.seq),
         pii_redaction_count,
@@ -1284,6 +1290,49 @@ mod tests {
         assert_eq!(request.models, vec!["test-model"]);
         assert_eq!(request.pii_redaction_count, 0);
         assert_eq!(timeline.pii_redaction_count, 0);
+    }
+
+    #[test]
+    fn timeline_includes_ordered_events_with_sequence() {
+        let tool_call = SessionEvent {
+            session_id: Uuid::nil(),
+            seq: 2,
+            event_type: SessionEventType::ToolCall,
+            payload: serde_json::json!({
+                "request_group_id": "group-1",
+                "tool_call": {"id": "call-1", "type": "function", "function": {"name": "read_file", "arguments": "{}"}}
+            }),
+            cost_cents: None,
+            created_at: Utc::now(),
+        };
+        let llm = event(1, "task-1", "Do the work", "group-1", "Do the work");
+        let tool_result = SessionEvent {
+            session_id: Uuid::nil(),
+            seq: 3,
+            event_type: SessionEventType::ToolResult,
+            payload: serde_json::json!({
+                "request_group_id": "group-1",
+                "result": {"tool_call_id": "call-1", "name": "read_file", "content": "ok", "is_error": false}
+            }),
+            cost_cents: None,
+            created_at: Utc::now(),
+        };
+        let continuation = SessionEvent {
+            session_id: Uuid::nil(),
+            seq: 4,
+            event_type: SessionEventType::Continuation,
+            payload: serde_json::json!({"task_id": "task-1", "request_group_id": "group-1"}),
+            cost_cents: None,
+            created_at: Utc::now(),
+        };
+        // Intentionally out of order: export must still return seq order.
+        let timeline = session_timeline(&[tool_result.clone(), llm.clone(), continuation, tool_call.clone()]);
+        assert_eq!(timeline.total_event_count, 3);
+        assert_eq!(timeline.latest_seq, Some(3));
+        let seqs: Vec<i64> = timeline.events.iter().map(|event| event.seq).collect();
+        assert_eq!(seqs, vec![1, 2, 3]);
+        assert_eq!(timeline.events.len(), timeline.total_event_count);
+        assert!(timeline.events.iter().all(|event| event.event_type != SessionEventType::Continuation));
     }
 
     #[test]

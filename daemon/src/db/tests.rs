@@ -1398,10 +1398,19 @@ async fn endpoint_reads_are_bounded_and_preserve_timeline_results() {
     let raw = db.read_events(session.id, None, None).await.unwrap();
     assert!(raw[0].payload.get("request_messages").is_some());
     let compact = db.read_timeline_events(session.id).await.unwrap();
-    assert_eq!(
-        engine_core::session_timeline(&compact),
-        engine_core::session_timeline(&raw)
-    );
+    let compact_timeline = engine_core::session_timeline(&compact);
+    let raw_timeline = engine_core::session_timeline(&raw);
+    // Compact timeline events are lightweight projections: request/response
+    // payloads stay behind the sequence-cursor pages, so only the derived
+    // summaries must match while both timelines carry the same seq sequence.
+    assert_eq!(compact_timeline.tasks, raw_timeline.tasks);
+    assert_eq!(compact_timeline.request_groups, raw_timeline.request_groups);
+    assert_eq!(compact_timeline.total_event_count, raw_timeline.total_event_count);
+    assert_eq!(compact_timeline.latest_seq, raw_timeline.latest_seq);
+    let compact_seqs: Vec<i64> = compact_timeline.events.iter().map(|event| event.seq).collect();
+    let raw_seqs: Vec<i64> = raw_timeline.events.iter().map(|event| event.seq).collect();
+    assert_eq!(compact_seqs, vec![1, 2, 3, 4]);
+    assert_eq!(raw_seqs, vec![1, 2, 3, 4]);
 }
 
 #[tokio::test]

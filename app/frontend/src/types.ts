@@ -132,6 +132,7 @@ export interface RequestGroupTimelineSummary {
 export interface SessionTimelineSummary {
   tasks: SessionTask[]
   request_groups: RequestGroupTimelineSummary[]
+  events: SessionEvent[]
   total_event_count: number
   latest_seq?: number
   pii_redaction_count?: number
