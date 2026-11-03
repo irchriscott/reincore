@@ -569,7 +569,7 @@ export function McpServers() {
                           setValue({ ...value, timeout_ms: Number(event.target.value) })
                         }
                       />
-                      <Checkbox id="mcp-loopback" label="Allow HTTP on numeric loopback only"
+                      <Checkbox id="mcp-loopback" label="Allow HTTP on loopback only (127.0.0.1, ::1, localhost)"
                         checked={!!value.allow_loopback_http} disabled={busy}
                         onChange={checked => setValue({ ...value, allow_loopback_http: checked })} />
                       <p className="text-xs text-[var(--color-text-muted)]">

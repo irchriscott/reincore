@@ -2127,6 +2127,48 @@ pub async fn ensure_launch_project(host: &str, port: u16, path: &Path) -> Result
 /// Validate or create the working directory for launching an app.
 /// If the path doesn't exist, prompt the user interactively to create it.
 /// Returns the resolved path, or an error if the user declines / the path
+/// Canonical form for a launch directory: absolute, with symlinks and
+/// `.`/`..` segments resolved when the directory exists. Registration,
+/// session attribution and MCP scoping all compare canonical paths, so an
+/// un-normalized `--path` would silently point sessions at the wrong project.
+fn canonical_launch_dir(path: PathBuf) -> PathBuf {
+    let absolute = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(&path))
+            .unwrap_or(path)
+    };
+    std::fs::canonicalize(&absolute).unwrap_or(absolute)
+}
+
+/// True when the daemon's running default project already matches the launch
+/// directory. Compares through the same normalization sessions use, so
+/// spelling differences (separators, `.` segments, symlinks, verbatim
+/// prefixes) never force a restart.
+fn launch_path_matches_default(daemon_default: &str, launch_path: &Path) -> bool {
+    let launch = launch_path.to_string_lossy();
+    match (
+        crate::db::normalize_project_path(daemon_default),
+        crate::db::normalize_project_path(&launch),
+    ) {
+        (Ok((_, a)), Ok((_, b))) => a == b,
+        _ => daemon_default == launch,
+    }
+}
+
+/// Current default project of the daemon on `host:port`, if reachable.
+async fn daemon_default_project(host: &str, port: u16) -> Option<String> {
+    crate::launch_routing::probe_daemon_state(host, port)
+        .await
+        .ok()??
+        .default_project_path
+        .clone()
+}
+
+/// Validate or create the working directory for launching an app.
+/// If the path doesn't exist, prompt the user interactively to create it.
+/// Returns the resolved path, or an error if the user declines / the path
 /// is invalid.
 async fn resolve_launch_path(path: &Option<String>) -> Result<Option<PathBuf>> {
     // When no --path is given, default to the current working directory of
@@ -2136,12 +2178,14 @@ async fn resolve_launch_path(path: &Option<String>) -> Result<Option<PathBuf>> {
         None => {
             let cwd = std::env::current_dir()
                 .map_err(|e| anyhow::anyhow!("failed to get current directory: {}", e))?;
-            return Ok(Some(cwd));
+            return Ok(Some(canonical_launch_dir(cwd)));
         }
     };
 
     let expanded = shellexpand::tilde(path).to_string();
-    let path_buf = PathBuf::from(&expanded);
+    // Canonicalize up front so the registered project, the spawned app
+    // working directory and later session attribution all use one form.
+    let path_buf = canonical_launch_dir(PathBuf::from(&expanded));
 
     if path_buf.exists() {
         if !path_buf.is_dir() {
@@ -2992,6 +3036,7 @@ async fn setup_ollama_provider(
 }
 
 pub async fn handle_launch(args: LaunchArgs) -> Result<()> {
+    let explicit_path = args.path.is_some();
     let LaunchArgs {
         app,
         provider,
@@ -3081,7 +3126,7 @@ pub async fn handle_launch(args: LaunchArgs) -> Result<()> {
         port,
         pid: None,
     };
-    let routing = crate::launch_routing::resolve_launch_routing_interactive(
+    let mut routing = crate::launch_routing::resolve_launch_routing_interactive(
         &daemon_config,
         &provider_label,
         Some(mode.as_str()),
@@ -3092,7 +3137,36 @@ pub async fn handle_launch(args: LaunchArgs) -> Result<()> {
     // request when the user chose "keep the current provider".
     let provider_label = routing.provider;
     let provider_header = routing.provider_header.as_deref();
-
+    // An explicit `--path` pins the project for sessions opened from the
+    // launched app, but a reused daemon keeps the default project from its
+    // own startup directory (muse sends no project extras, so its sessions
+    // fall back to it). Restart with the requested path instead of silently
+    // attributing to the stale directory.
+    if explicit_path && !routing.start_daemon {
+        if let Some(dir) = launch_path.as_deref() {
+            match daemon_default_project(&host, port).await {
+                Some(default) if launch_path_matches_default(&default, dir) => {}
+                Some(default) => {
+                    eprintln!(
+                        "{}",
+                        log::warning(&format!(
+                            "Daemon default project is '{}', but --path is '{}'; restarting the daemon so launched sessions attribute to the requested project (in-flight requests are aborted).",
+                            default,
+                            dir.display()
+                        ))
+                    );
+                    routing.start_daemon = true;
+                    routing.stop_first = true;
+                }
+                None => {
+                    eprintln!(
+                        "{}",
+                        log::warning("Could not probe the running daemon's default project; keeping it. Sessions may attribute to the daemon's startup directory instead of --path.")
+                    );
+                }
+            }
+        }
+    }
     // Ollama handles its own credentials/model selection (local vs. cloud),
     // so skip the generic `ensure_api_key` path for it.
     if provider_label.to_lowercase() != "ollama" {
@@ -3563,5 +3637,57 @@ mod tests {
             ]
         );
         assert!(app_extra_args("codex", "http://127.0.0.1:8989").is_empty());
+    }
+
+    #[test]
+    fn launch_path_matches_daemon_default_ignores_spelling() {
+        // Same directory through different spellings (trailing separator,
+        // `.` segments) must not trigger a daemon restart. Both sides exist,
+        // as they do for real launch and daemon directories.
+        let root =
+            std::env::temp_dir().join(format!("reincore-launch-match-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        let trailing = format!("{}{}", root.display(), std::path::MAIN_SEPARATOR);
+        assert!(launch_path_matches_default(
+            &root.to_string_lossy(),
+            Path::new(&trailing)
+        ));
+        let via_sub = format!(
+            "{}{}sub{}..",
+            root.display(),
+            std::path::MAIN_SEPARATOR,
+            std::path::MAIN_SEPARATOR
+        );
+        assert!(launch_path_matches_default(
+            &root.to_string_lossy(),
+            Path::new(&via_sub)
+        ));
+        let other = std::env::temp_dir().join("reincore-launch-other");
+        assert!(!launch_path_matches_default(
+            &root.to_string_lossy(),
+            &other
+        ));
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[tokio::test]
+    async fn resolve_launch_path_returns_canonical_directory() {
+        let root = std::env::temp_dir().join(format!(
+            "reincore-launch-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let spelled = format!("{}{}.", root.display(), std::path::MAIN_SEPARATOR);
+        let resolved = resolve_launch_path(&Some(spelled)).await.unwrap().unwrap();
+        assert_eq!(
+            resolved,
+            std::fs::canonicalize(&root).unwrap(),
+            "the registered project path must be canonical so session attribution matches"
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 }

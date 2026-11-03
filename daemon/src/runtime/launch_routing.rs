@@ -34,6 +34,9 @@ pub struct DaemonState {
     /// All registered provider labels (multi-provider mode), or the single
     /// provider repeated.
     pub providers: Vec<String>,
+    /// Default project path of the running daemon (fallback for sessions
+    /// that carry no project). Absent on older daemons.
+    pub default_project_path: Option<String>,
 }
 
 impl DaemonState {
@@ -101,11 +104,16 @@ pub async fn probe_daemon_state(host: &str, port: u16) -> Result<Option<DaemonSt
         .and_then(|v| v.as_str())
         .map(str::to_string);
 
+    let default_project_path = body
+        .get("default_project_path")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
     Ok(Some(DaemonState {
         mode,
         provider,
         api_mode,
         providers,
+        default_project_path,
     }))
 }
 
@@ -456,6 +464,7 @@ mod tests {
             provider: None,
             api_mode: None,
             providers: vec!["openai".to_string(), "anthropic".to_string()],
+            default_project_path: None,
         };
         assert!(multi.is_multi_provider());
         assert!(!multi.is_single_provider());
@@ -467,6 +476,7 @@ mod tests {
             provider: Some("ollama".to_string()),
             api_mode: Some("agentic".to_string()),
             providers: vec!["ollama".to_string()],
+            default_project_path: None,
         };
         assert!(single.is_single_provider());
         assert!(single.has_provider("OLLAMA"));

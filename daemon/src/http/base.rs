@@ -11,6 +11,7 @@ pub async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         "edition": "engine",
         "mode": "multi_provider",
         "providers": providers,
+        "default_project_path": state.default_project_path.as_str(),
     }))
 }
 
@@ -23,6 +24,7 @@ pub async fn health_single_provider(
         "mode": "single_provider",
         "api_mode": state.api_mode.as_str(),
         "providers": [state.provider.label()],
+        "default_project_path": state.default_project_path.as_str(),
     }))
 }
 

@@ -720,6 +720,56 @@ async fn discover_inventory(transport: &Arc<Transport>) -> EngineResult<BTreeMap
     Ok(discovered)
 }
 
+/// Canonical key for comparing a configured project path with a session
+/// context path. Mirrors the daemon's project normalization (absolute,
+/// symlink-resolved when possible, verbatim prefixes stripped, separators
+/// trimmed, case-insensitive on Windows) so spelling differences never hide
+/// a server's tools, however the server was added or the session was opened.
+fn project_key(raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let input = std::path::PathBuf::from(raw);
+    let absolute = if input.is_absolute() {
+        input
+    } else {
+        std::env::current_dir().ok()?.join(input)
+    };
+    let resolved = std::fs::canonicalize(&absolute).unwrap_or(absolute);
+    let mut display = resolved.to_string_lossy().into_owned();
+    #[cfg(windows)]
+    {
+        if let Some(without_prefix) = display.strip_prefix(r"\\?\UNC\") {
+            display = format!(r"\\{}", without_prefix);
+        } else if let Some(without_prefix) = display.strip_prefix(r"\\?\") {
+            display = without_prefix.to_string();
+        }
+    }
+    while display.len() > 1 && (display.ends_with('/') || display.ends_with('\\')) {
+        if display.len() == 3 && display.as_bytes().get(1) == Some(&b':') {
+            break;
+        }
+        display.pop();
+    }
+    let mut key = display.replace('\\', "/");
+    #[cfg(windows)]
+    {
+        key = key.to_lowercase();
+    }
+    Some(key)
+}
+
+fn same_project(a: Option<&String>, b: Option<&String>) -> bool {
+    match (
+        a.and_then(|value| project_key(value)),
+        b.and_then(|value| project_key(value)),
+    ) {
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
 pub struct McpExecutor {
     config: ServerConfig,
     transport: Arc<Transport>,
@@ -786,11 +836,20 @@ impl McpExecutor {
                     .transpose()
                     .map_err(|_| error("invalid MCP action contract"))?,
                 name: format!("{}__{}", config.name, name),
-                description: tool
-                    .get("description")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_owned(),
+                // Carry the server name in the description (not just the
+                // `server__tool` name prefix) so a user naming the server can
+                // be routed to its tools.
+                description: {
+                    let upstream = tool
+                        .get("description")
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
+                    if upstream.is_empty() {
+                        format!("MCP server \"{}\".", config.name)
+                    } else {
+                        format!("MCP server \"{}\": {}", config.name, upstream)
+                    }
+                },
                 parameters: schema.clone(),
                 safe_to_memoize: policy.cache.is_some(),
                 memoization_policy: None,
@@ -829,7 +888,7 @@ impl McpExecutor {
                 project_id: None,
                 project_ids,
                 project_path: Some(path),
-            } if project_ids.is_empty() => c.project_path.as_ref() == Some(path),
+            } if project_ids.is_empty() => same_project(c.project_path.as_ref(), Some(path)),
             _ => false,
         }
     }

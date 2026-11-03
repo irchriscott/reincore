@@ -61,7 +61,7 @@ pub(super) fn validate_endpoint(config: &ServerConfig) -> EngineResult<url::Url>
         || !(url.scheme() == "https"
             || (url.scheme() == "http" && loopback && config.allow_loopback_http))
     {
-        return Err(error("MCP requires HTTPS or explicit numeric loopback HTTP; endpoint credentials/query forbidden"));
+        return Err(error("MCP requires HTTPS or explicit loopback HTTP (127.0.0.1, ::1, or localhost); endpoint credentials/query forbidden"));
     }
 
     if !(100..=120_000).contains(&config.timeout_ms) {

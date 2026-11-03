@@ -195,10 +195,20 @@ impl AppState {
 }
 
 fn local_project_defaults(project_path: Option<&str>) -> (String, String) {
-    let path = project_path
+    let raw = project_path
         .map(std::path::PathBuf::from)
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_else(|| std::path::PathBuf::from("."));
+    // Canonicalize so the daemon default matches the normalization sessions
+    // and MCP scoping apply (verbatim prefixes, separators, symlinks).
+    let absolute = if raw.is_absolute() {
+        raw
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(&raw))
+            .unwrap_or(raw)
+    };
+    let path = std::fs::canonicalize(&absolute).unwrap_or(absolute);
     let name = path
         .file_name()
         .and_then(|part| part.to_str())

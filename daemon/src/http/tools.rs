@@ -369,14 +369,13 @@ pub(super) async fn execute_local_tool_call(
 }
 
 fn local_context(session: &Session) -> engine_core::tool_cache::LocalToolCacheContext {
-    // Relative/unresolvable paths cannot define a stable repository boundary.
+    // Normalize exactly like session creation so MCP project scoping compares
+    // identical forms (verbatim prefixes, separators, case, symlinks).
     let project_path = session
         .project_path
         .as_deref()
-        .map(std::path::Path::new)
-        .filter(|path| path.is_absolute())
-        .and_then(|path| std::fs::canonicalize(path).ok())
-        .and_then(|path| path.to_str().map(str::to_owned));
+        .and_then(|raw| crate::db::normalize_project_path(raw).ok())
+        .map(|(display, _)| display);
     engine_core::tool_cache::LocalToolCacheContext {
         session_id: session.id,
         project_path,

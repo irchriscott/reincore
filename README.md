@@ -39,7 +39,7 @@ Its rule is simple: guided, never stopped. Budgets lower the cost profile of lat
 
 - Every tool call passes a deterministic action gate. Admin-owned rules and JSON-schema checks decide what runs; batches are capped at 64 calls and 1 MB of arguments per call.
 - Mandatory authorization boundaries cannot be downgraded. A withheld action reports why it was stopped instead of failing silently.
-- MCP servers must use HTTPS. Plain HTTP is accepted only on numeric loopback for local servers.
+- MCP servers must use HTTPS. Plain HTTP is accepted only on loopback (127.0.0.1, ::1, or localhost) for local servers.
 - Provider keys and OAuth tokens live in `~/.reincore-io/credentials.json`, restricted to the current user (0600 on Unix).
 
 ### Privacy
@@ -1428,7 +1428,7 @@ remain supported; configure only one credential source per server.
 | Field | Contract |
 |---|---|
 | `name` | Required, 1–32 ASCII letters/digits/underscores; cannot contain `__`. Becomes the prefix in `repository__read_file`. Names are unique in the file. |
-| `url` | HTTPS or explicitly allowed numeric loopback HTTP. Userinfo, queries and fragments are forbidden. |
+| `url` | HTTPS or explicitly allowed loopback HTTP (127.0.0.1, ::1, or localhost). Userinfo, queries and fragments are forbidden. |
 | `bearer_token_env` | **Legacy alternative.** Environment variable name. Cannot be combined with `bearer_token`. |
 | `allow_loopback_http` | Optional boolean, default false. |
 | `bearer_token` | Token value (1–16384 visible ASCII bytes, without the `Bearer ` prefix). Stored directly in `mcp.json`; required for non-loopback endpoints unless using the legacy env reference. Omit for unauthenticated loopback servers. |

@@ -258,7 +258,7 @@ pub(super) fn validate_scopes(scopes: &[String]) -> EngineResult<()> {
 }
 
 /// A resource indicator names the MCP server, so it follows the endpoint
-/// rules: HTTPS, or numeric loopback HTTP for local servers.
+/// rules: HTTPS, or loopback HTTP (127.0.0.1, ::1, or localhost) for local servers.
 fn validate_uri(value: &str, public_only: bool) -> EngineResult<()> {
     let url = url::Url::parse(value).map_err(|_| error("invalid OAuth resource"))?;
     ensure(

@@ -899,3 +899,46 @@ async fn action_gate_mcp_denies_invalid_schema_and_operator_rule_before_dispatch
         .unwrap();
     assert_eq!(fixture.calls(), 1);
 }
+
+#[tokio::test]
+async fn discovered_tool_descriptions_carry_server_name() {
+    let fixture = McpFixture::start(false).await;
+    let executor = executor(&fixture).await;
+    let definitions = executor
+        .list_local_tools_in_context(&context())
+        .await
+        .unwrap();
+    let read = definitions
+        .iter()
+        .find(|definition| definition.name == "fixture__read")
+        .expect("fixture__read must be discovered");
+    assert_eq!(read.description, "MCP server \"fixture\": fixture read");
+}
+
+#[test]
+fn project_paths_compare_independent_of_spelling() {
+    let root = std::env::temp_dir().join("reincore-project-key");
+    std::fs::create_dir_all(root.join("sub")).unwrap();
+    // On Windows the canonical form carries the verbatim `\\?\` prefix
+    // while `display` does not, so this also covers prefixed spellings.
+    let canonical = std::fs::canonicalize(&root)
+        .unwrap()
+        .to_string_lossy()
+        .into_owned();
+    let spelled =
+        |suffix: &str| format!("{}{}{}", root.display(), std::path::MAIN_SEPARATOR, suffix);
+    for variant in [
+        canonical.clone(),
+        spelled(""),
+        spelled(&format!("sub{}..", std::path::MAIN_SEPARATOR)),
+    ] {
+        assert!(
+            same_project(Some(&variant), Some(&canonical)),
+            "{variant} should match {canonical}"
+        );
+    }
+    assert!(!same_project(Some(&canonical), Some(&spelled("elsewhere"))));
+    assert!(!same_project(None, Some(&canonical)));
+    assert!(!same_project(Some(&canonical), None));
+    std::fs::remove_dir_all(&root).ok();
+}

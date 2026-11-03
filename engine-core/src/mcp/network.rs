@@ -68,7 +68,8 @@ pub fn validate_cloud_url(raw: &str) -> EngineResult<()> {
 
 /// Validates an OAuth endpoint the engine calls itself (token, registration or
 /// metadata). Cloud hosts reach only public HTTPS; local hosts may also use
-/// numeric loopback HTTP. Unlike MCP endpoints, a query string is allowed.
+/// loopback HTTP (127.0.0.1, ::1, or localhost). Unlike MCP endpoints, a query
+/// string is allowed.
 pub fn validate_endpoint_url(raw: &str, public_only: bool) -> EngineResult<url::Url> {
     let url = url::Url::parse(raw).map_err(|_| error("invalid authorization endpoint"))?;
     if raw.len() > 2048
@@ -86,15 +87,16 @@ pub fn validate_endpoint_url(raw: &str, public_only: bool) -> EngineResult<url::
         validate_cloud_url(target.as_str())?;
     } else if !(url.scheme() == "https" || url.scheme() == "http" && loopback(&url)) {
         return Err(error(
-            "authorization endpoints require HTTPS or numeric loopback HTTP",
+            "authorization endpoints require HTTPS or loopback HTTP (127.0.0.1, ::1, or localhost)",
         ));
     }
     Ok(url)
 }
 
 pub(super) fn loopback(url: &url::Url) -> bool {
-    url.host_str()
-        .is_some_and(|host| host == "127.0.0.1" || host == "[::1]")
+    url.host_str().is_some_and(|host| {
+        host == "127.0.0.1" || host == "[::1]" || host.eq_ignore_ascii_case("localhost")
+    })
 }
 
 /// HTTP client for upstream MCP and OAuth traffic: never follows redirects or
@@ -174,6 +176,21 @@ mod tests {
         assert!(public_address("2606:4700:4700::1111".parse().unwrap()));
         assert!(validate_cloud_url("https://mcp.example.com/mcp").is_ok());
     }
+    #[test]
+    fn loopback_covers_localhost_name() {
+        for url in [
+            "http://localhost:9000/mcp",
+            "http://127.0.0.1:9000/mcp",
+            "http://[::1]:9000/mcp",
+        ] {
+            let parsed = url::Url::parse(url).unwrap();
+            assert!(loopback(&parsed), "{url}");
+        }
+        let parsed = url::Url::parse("http://example.com/mcp").unwrap();
+        assert!(!loopback(&parsed));
+        assert!(validate_endpoint_url("http://localhost:9000/token", false).is_ok());
+    }
+
     #[tokio::test]
     async fn resolver_rejects_loopback_dns_answers() {
         assert!(PublicResolver
