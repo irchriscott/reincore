@@ -13,7 +13,7 @@ Existing gateways optimize the call. ReinCore optimizes the task. It understands
 
 Its rule is simple: guided, never stopped. Budgets lower the cost profile of later steps instead of destroying progress. Loop detection redirects the agent instead of killing the session. State is serialized so work is resumable.
 
-### For consumers (people/companies that use agents)
+### For consumers (users/organizations using agents)
 
 - Run agents cheaper. Prompt-prefix normalization and tool-result memoization cut repeated token and tool spend.
 - Set a budget without fear. Sessions degrade to cheaper models instead of stopping mid-task, and checkpoints let you pause and resume.
